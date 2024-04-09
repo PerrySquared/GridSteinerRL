@@ -6,9 +6,9 @@ import random
 
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 1000}
+    metadata = {"render_modes": ["human"], "render_fps": 15}
 
-    def __init__(self, render_mode="human", size=5):
+    def __init__(self, render_mode=None, size=10):
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
         
@@ -118,10 +118,11 @@ class GridWorldEnv(gym.Env):
     
     def step(self, action):
         # check if exited
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                quit()
+        if self.render_mode == "human":
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    quit()
         # move
         # print("len: ", len(self._target_locations))
         self._move(action) # update the position   
