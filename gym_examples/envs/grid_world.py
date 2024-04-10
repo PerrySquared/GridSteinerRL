@@ -162,14 +162,14 @@ class GridWorldEnv(gym.Env):
         
         if self.steps_counter > 50 or self.iterations > 100:
             game_over = True
-            reward = -1
-
+            reward = -3
+            
         if len(self._target_locations) == 0:
             game_over = True
-            reward = 2
+            reward = 10
 
         if np.array_equal(self.previous_position, self._agent_location):
-            reward -= 0.5
+            reward -= 0.001
         self.previous_position = self._agent_location[:]
 
         return reward - 0.005, game_over, self.steps_counter # score is less with each step, hence 30 / steps_counter
@@ -190,7 +190,7 @@ class GridWorldEnv(gym.Env):
         reward = 0
         # add reward for collecting _target_locations
         if self.check_target_location():
-            reward = 1
+            reward = 3
             
         score, terminated, _ = self.game_over_check()
         reward += score
