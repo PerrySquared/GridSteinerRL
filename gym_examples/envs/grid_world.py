@@ -1,14 +1,14 @@
-import gym
-from gym import spaces
+import gymnasium as gym
+from gymnasium import spaces
 import pygame
 import numpy as np
 import random
 
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 1000}
+    metadata = {"render_modes": ["human"], "render_fps": 10000}
 
-    def __init__(self, render_mode="human", size=10):
+    def __init__(self, render_mode="human", size=32):
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
         
@@ -20,10 +20,12 @@ class GridWorldEnv(gym.Env):
         
         self.observation_space = spaces.Dict(
             {
-                "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "target": spaces.Box(0, 1, shape=(size*size,), dtype=np.float64),
+                "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                "target_locations": spaces.Box(0, 0.5, shape=(self.size, self.size), dtype=np.float64),
+                "target_matrix": spaces.Box(0, 1, shape=(self.size, self.size), dtype=np.float64),
                 "targets_relative_line": spaces.Discrete(5),
-                "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int)
+                "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
+                "targets_left": spaces.Discrete(5)
             }
         )
         
@@ -53,10 +55,10 @@ class GridWorldEnv(gym.Env):
         
     def reset(self, seed=None, options=None):
         self.matrix = np.zeros((self.size,self.size))
-        self.steps_counter = 1
         self.iterations = 1
+        self.footprint = 1
         
-        if self.env_steps % 200 == 0:    
+        if self.env_steps % 400 == 0:    
             self._target_locations_copy = self.get_target_locations()
             self.random_element = random.randint(0, len(self._target_locations_copy) - 1)
                 
@@ -64,7 +66,7 @@ class GridWorldEnv(gym.Env):
             del self._target_locations_copy[self.random_element]
 
         self.env_steps += 1
-        print(self.env_steps)
+        # print(self.env_steps)
         
         self._target_locations = self._target_locations_copy[:]
         self._agent_location = self._agent_location_copy[:]
@@ -105,8 +107,9 @@ class GridWorldEnv(gym.Env):
         x = self._agent_location[0]
         y = self._agent_location[1]
 
-        if self.matrix[x][y] == 0 or self.matrix[x][y] == 0.5: # check if the next cell is already used by a wire from current net (in a more complex situation should be checked against an array of already used positions)
-            self.steps_counter += 1 # if not add 1 to the total wire length
+        if self.matrix[x][y] == 0 or self.matrix[x][y] == 0.5: # check if the next cell is empty or target (in a more complex situation should be checked against an array of already used positions)
+            # add 1 to the total wire length
+            self.footprint += 1
             self.matrix[x][y] = 1
 
 
@@ -120,6 +123,13 @@ class GridWorldEnv(gym.Env):
     
         # print(x,y)
         # print(np.transpose(self.matrix))
+        
+    def get_matrix_with_targets(self):
+        matrix = np.zeros((self.size, self.size))
+        for target in self._target_locations:
+            matrix[target[0], target[1]] = 0.5
+            
+        return matrix
 
     def check_for_target_general(self):
         target_relative_positions = np.array([0, 0, 0, 0]) # top, bottom, left, right
@@ -152,7 +162,7 @@ class GridWorldEnv(gym.Env):
             
         return 4
     
-    
+            
     
     def game_over_check(self):
         # print("targets: ", self._target_locations)
@@ -160,19 +170,19 @@ class GridWorldEnv(gym.Env):
         game_over = False
         self.iterations += 1
         
-        if self.steps_counter > 50 or self.iterations > 100:
+        if self.footprint > 128 or self.iterations > 512:
             game_over = True
-            reward = -3
+            reward = -10
             
         if len(self._target_locations) == 0:
             game_over = True
             reward = 10
 
-        if np.array_equal(self.previous_position, self._agent_location):
-            reward -= 0.001
-        self.previous_position = self._agent_location[:]
+        # if np.array_equal(self.previous_position, self._agent_location):
+        #     reward -= 0.001
+        # self.previous_position = self._agent_location[:]
 
-        return reward - 0.005, game_over, self.steps_counter # score is less with each step, hence 30 / steps_counter
+        return reward - 0.05 * self.footprint - 0.005 * self.iterations, game_over, self.footprint # score is less with each step
     
     
     
@@ -213,9 +223,11 @@ class GridWorldEnv(gym.Env):
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
         return {
             "agent": self._agent_location,
-            "target": self.matrix.flatten(),
+            "target_locations": self.get_matrix_with_targets(),
+            "target_matrix": self.matrix,
             "targets_relative_line": self.check_for_target_line(),
-            "targets_relative_general": self.check_for_target_general()
+            "targets_relative_general": self.check_for_target_general(),
+            "targets_left": len(self._target_locations)
             }
 
     def _get_info(self):
@@ -253,6 +265,10 @@ class GridWorldEnv(gym.Env):
                 ),
             )
             
+        font = pygame.font.Font(None, 24)  # Choose a font and size
+        text_surface = font.render(str(self.env_steps), True, (0, 0, 255))  # Render the text
+        canvas.blit(text_surface, (10, 10))  # Blit the text onto the canvas
+            
         # Now we draw the agent
         
         for i in range(len(self.matrix)):
@@ -281,14 +297,14 @@ class GridWorldEnv(gym.Env):
                 0,
                 (0, pix_square_size * x),
                 (self.window_size, pix_square_size * x),
-                width=3,
+                width=1,
             )
             pygame.draw.line(
                 canvas,
                 0,
                 (pix_square_size * x, 0),
                 (pix_square_size * x, self.window_size),
-                width=3,
+                width=1,
             )
 
         if self.render_mode == "human":
