@@ -2,6 +2,7 @@ import gymnasium as gym
 import gym_examples
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
@@ -29,12 +30,12 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 4
+    PROCESSES_TO_TEST = 1
     NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
     TRAIN_STEPS = 1000000
     # Number of episodes for evaluation
-    EVAL_EPS = 20
-    ALGO = A2C
+    EVAL_EPS = 5
+    ALGO = PPO
 
     # We will create one environment to evaluate the agent on
     eval_env = gym.make('gym_examples/GridWorld-v0')
@@ -62,12 +63,13 @@ if __name__ == "__main__":
     for experiment in range(NUM_EXPERIMENTS):
         # it is recommended to run several experiments due to variability in results
         train_env.reset()
-        model = ALGO("MultiInputPolicy", train_env, verbose=0, device="cpu")
+        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu")
         start = time.time()
         model.learn(total_timesteps=TRAIN_STEPS)
         times.append(time.time() - start)
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
         rewards.append(mean_reward)
+        
     # Important: when using subprocesses, don't forget to close them
     # otherwise, you may have memory issues when running a lot of experiments
     train_env.close()
@@ -75,8 +77,36 @@ if __name__ == "__main__":
     reward_std.append(np.std(rewards))
     training_times.append(np.mean(times))
 
+    def plot_training_results(training_steps_per_second, reward_averages, reward_std):
+        """
+        Utility function for plotting the results of training
 
+        :param training_steps_per_second: List[double]
+        :param reward_averages: List[double]
+        :param reward_std: List[double]
+        """
+        plt.figure(figsize=(9, 4))
+        plt.subplots_adjust(wspace=0.5)
+        plt.subplot(1, 2, 1)
+        plt.errorbar(
+            PROCESSES_TO_TEST,
+            reward_averages,
+            yerr=reward_std,
+            capsize=2,
+            c="k",
+            marker="o",
+        )
+        plt.xlabel("Processes")
+        plt.ylabel("Average return")
+        plt.subplot(1, 2, 2)
+        plt.bar(range(len(PROCESSES_TO_TEST)), training_steps_per_second)
+        plt.xticks(range(len(PROCESSES_TO_TEST)), PROCESSES_TO_TEST)
+        plt.xlabel("Processes")
+        plt.ylabel("Training steps per second")
 
+    training_steps_per_second = [TRAIN_STEPS / t for t in training_times]
+
+    plot_training_results(training_steps_per_second, reward_averages, reward_std)
 
 # if __name__ == "__main__":
     
