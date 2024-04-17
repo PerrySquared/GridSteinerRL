@@ -173,7 +173,7 @@ class GridWorldEnv(gym.Env):
             if self.matrix[_agent_location[0], _agent_location[1]] == TRACE_CELL or self.matrix[_agent_location[0], _agent_location[1]] == PATH_CELL:
                 while self.matrix[_agent_location[0], _agent_location[1]] == TRACE_CELL or self.matrix[_agent_location[0], _agent_location[1]] == PATH_CELL:
                     self.matrix[_agent_location[0], _agent_location[1]] = PATH_CELL
-                    _agent_location = _agent_location + direction
+                    _agent_location = np.clip(_agent_location + direction, 0, self.size - 1)
         else:
             return True      
         
