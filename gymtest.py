@@ -9,7 +9,8 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
 from stable_baselines3.common.utils import set_random_seed
 from stable_baselines3 import PPO, A2C
-
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 import os
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
@@ -30,11 +31,10 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 1
+    PROCESSES_TO_TEST = 4
     NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 1000000
-    # Number of episodes for evaluation
-    EVAL_EPS = 5
+    TRAIN_STEPS = 100000
+    EVAL_EPS = 3
     ALGO = PPO
 
     # We will create one environment to evaluate the agent on
@@ -63,7 +63,7 @@ if __name__ == "__main__":
     for experiment in range(NUM_EXPERIMENTS):
         # it is recommended to run several experiments due to variability in results
         train_env.reset()
-        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu")
+        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu", tensorboard_log="./gp_tensorboard/")
         start = time.time()
         model.learn(total_timesteps=TRAIN_STEPS)
         times.append(time.time() - start)
@@ -96,17 +96,20 @@ if __name__ == "__main__":
             c="k",
             marker="o",
         )
-        plt.xlabel("Processes")
+        plt.xlabel("Process")
         plt.ylabel("Average return")
         plt.subplot(1, 2, 2)
-        plt.bar(range(len(PROCESSES_TO_TEST)), training_steps_per_second)
-        plt.xticks(range(len(PROCESSES_TO_TEST)), PROCESSES_TO_TEST)
-        plt.xlabel("Processes")
+        plt.bar(range(PROCESSES_TO_TEST), training_steps_per_second)
+        plt.xlabel("Process")
         plt.ylabel("Training steps per second")
 
-    training_steps_per_second = [TRAIN_STEPS / t for t in training_times]
+        plt.show()
+        
+    # training_steps_per_second = [TRAIN_STEPS / t for t in training_times]
 
-    plot_training_results(training_steps_per_second, reward_averages, reward_std)
+    # plot_training_results(training_steps_per_second, reward_averages, reward_std)
+    
+    
 
 # if __name__ == "__main__":
     
