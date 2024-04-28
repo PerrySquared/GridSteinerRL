@@ -4,11 +4,9 @@ import pygame
 import numpy as np
 import random
 import copy
-import os
-os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 import sys
+import os
 np.set_printoptions(threshold=sys.maxsize)
-
 
 TRACE_CELL = 1
 INTERSECTION_CELL = 2
@@ -16,30 +14,36 @@ TERMINAL_CELL = 3
 PATH_CELL = 4
 AGENT = 5
 
-random.seed(10)
+RENDER_EACH = 3000000
+RESET_EACH = 2000
+
+random.seed(11)
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 500}
+    metadata = {"render_modes": ["human"], "render_fps": 0.5}
 
-    def __init__(self, render_mode="human", size=32):
+    def __init__(self, render_mode=None, size=32):
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
         
-        self._target_locations_copy = None
-        self._agent_location_copy = None
+        self._target_locations_copy = []
+        self._agent_location_copy = []
+        self._target_locations = []
+        self._agent_location = []
         self.random_element = 0
         self.env_steps = 0
         
-        self.observation_space = spaces.Dict(
-            {
-                "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
-                # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
-                "target_matrix": spaces.Box(0, 5, shape=(self.size, self.size), dtype=int),
-                # "targets_relative_line": spaces.Discrete(5),
-                # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(5)
-            }
-        )
+        self.observation_space = spaces.Box(0, 1, shape=(self.size, self.size), dtype=np.float64)
+        # self.observation_space = spaces.Dict(
+        #     {
+        #         # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+        #         # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
+        #         "target_matrix": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64)
+        #         # "targets_relative_line": spaces.Discrete(5),
+        #         # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
+        #         # "targets_left": spaces.Discrete(5)
+        #     }
+        # )
         
         self.action_space = spaces.Discrete(4)
 
@@ -49,6 +53,8 @@ class GridWorldEnv(gym.Env):
             2: np.array([-1, 0]), # left
             3: np.array([1, 0]), # right
         }
+        
+        render_mode = "human"
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -68,10 +74,11 @@ class GridWorldEnv(gym.Env):
     def reset(self, seed=None, options=None):
         self.matrix = np.zeros((self.size,self.size), dtype=int)
         self.iterations = 1
-        self.footprint = 1
+        self.total_footprint = 0
         self.previous_position = np.array([-1, -1])
+        self.initial_targets_amount = 1
         
-        if self.env_steps % 100 == 0:    # get new random env every 100 envs
+        if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = self.get_target_locations()
             self._agent_location_copy = random.choice(self._target_locations_copy)   
             
@@ -80,14 +87,14 @@ class GridWorldEnv(gym.Env):
 
         self.env_steps += 1
         # print(self.env_steps) 
-        
         for _target_location in self._target_locations:
-            self.matrix[_target_location[0], _target_location[1]] = TERMINAL_CELL
             self.place_support_nodes(self._target_locations)
-
+            self.matrix[_target_location[0], _target_location[1]] = TERMINAL_CELL
+            
         # self.matrix[self._agent_location[0]][self._agent_location[1]] = TERMINAL_CELL # make starting _target_location a part of the path (intersection)
 
-        self.check_target_location()
+        self.check_target_location() # remove first target that agent is on top of
+        self.initial_targets_amount = len(self._target_locations) # get the amount of targets left
         
         """marking current agent position in a matrix and saving its position as previous one to use later"""
         self.matrix[self._agent_location[0]][self._agent_location[1]] = AGENT
@@ -96,10 +103,11 @@ class GridWorldEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
         
-        if self.render_mode == "human":
-            self._render_frame()   
-        if self.render_mode == "rgb_array":
-            self._render_frame_as_rgb_array() 
+        if self.env_steps % RENDER_EACH == 0: # render only mod N env
+            if self.render_mode == "human":
+                self._render_frame()
+            if self.render_mode == "rgb_array":
+                self._render_frame_as_rgb_array()
 
 
         return observation, info
@@ -131,42 +139,68 @@ class GridWorldEnv(gym.Env):
             elif(self.matrix[iterator[0],iterator[1]] != TERMINAL_CELL):
                 self.matrix[iterator[0], iterator[1]] = TRACE_CELL
 
+
             iterator[0] += step[0]
             iterator[1] += step[1]
             
 
     def step(self, action):
         # check if exited
-        if self.render_mode == "human" or self.render_mode == "rgb_array":
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    quit()
+        # print("\nstarted\n")
+        if self.env_steps % RENDER_EACH == 0:
+            if self.render_mode == "human" or self.render_mode == "rgb_array":
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        quit()
         # move
-
-        truncated = self._move(action) # update the position
-        # reset step reward
+        self.iterations += 1
+        
         reward = 0
-        # add reward for collecting _target_locations
-        if self.check_target_location():
-            reward = 0.5
+        not_moved = False
+        terminated = False     
+        truncated = False
+        incorrect_move = False
+        # print(self.matrix)
+        
+        not_moved = self._move(action) # update the position 
+        # print("\n", incorrect_move, "\n")
+        # print("moved\n")
+        
+        # if not incorrect_move:          
+        reward, terminated, truncated = self.game_over_check()
             
-        score, terminated, _ = self.game_over_check()
-        reward += score
+        # print(not_moved)
+        if not_moved:
+            reward = -0.7
+            
+        # if incorrect_move:
+        #     print("HUH?")
+        #     print(self.matrix)
+        #     print(self._agent_location)
+        #     print(action)
+        #     print(self._target_locations)
+        #     reward = -1
+        #     truncated = True
+             
+        # print("rewarded\n")
         
         # print(self.matrix)
         
         observation = self._get_obs()
         info = self._get_info()
+        # print("observed\n")
         
-        if self.env_steps % 1 == 0: # render only mod N env
+        if self.env_steps % RENDER_EACH == 0: # render only mod N env
+            print(reward)
             if self.render_mode == "human":
                 self._render_frame()
             if self.render_mode == "rgb_array":
                 self._render_frame_as_rgb_array()
             
         # 6. return game over and score
-        # print(reward)
+        # print(reward, "\n")
+        # print("returned\n======================================\n")
         return observation, reward, terminated, truncated, info
 
     
@@ -183,7 +217,7 @@ class GridWorldEnv(gym.Env):
                     self.matrix[_agent_location[0], _agent_location[1]] = PATH_CELL
                     _agent_location = np.clip(_agent_location + direction, 0, self.size - 1)
         else:
-            return True            
+            return False, True # in case of unexpected movement (if it's even possible) - will shut down the proccess with an error
         
         """three lines below are needed to create context in the matrix about agent location,
         i.e. making current position of an agent a 5 and changing the previous one into 
@@ -191,35 +225,43 @@ class GridWorldEnv(gym.Env):
         
         self.matrix[self.previous_position[0]][self.previous_position[1]] = INTERSECTION_CELL 
         self.matrix[_agent_location[0]][_agent_location[1]] = AGENT # agent marked AFTER intersection in case it stays in the same place
+        not_moved = np.array_equal(_agent_location, self.previous_position) # check if agent hasn't moved (due to border clipping)
         self.previous_position = copy.deepcopy(_agent_location)
         
         self._agent_location = _agent_location
         
-        return False
+        return not_moved
 
     def game_over_check(self):
         # print("targets: ", self._target_locations)
         reward = 0
-        game_over = False
-        self.iterations += 1
-        self.footprint = (self.matrix == PATH_CELL).sum()
+        terminated = False
+        truncated = False
         
-        if self.footprint > 128 or self.iterations > 128:
-            game_over = True
-            reward = -3
+        footprint = (self.matrix == PATH_CELL).sum() # how many path cells are there
             
-        if len(self._target_locations) == 0:
-            game_over = True
-            reward = 2
+        # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
+        if footprint > self.total_footprint: 
+            reward -= (1 / (self.size - 2)) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
+            self.total_footprint = copy.deepcopy(footprint)
+            
+        # add reward for collecting _target_locations
+        if self.check_target_location():
+            reward += 1 # / self.initial_targets_amount # lessen the reward for collecting single target (dependant on the target amount)
+            
+        if len(self._target_locations) == 0: # successful game over
+            terminated = True
+            reward += 0.1 # was uncommented
+            
+        if self.iterations > 30: # terminated due to excessive amount of steps
+            # print("trunc")
+            # reward = -1
+            truncated = True
+        # if np.array_equal(self.previous_position, self._agent_location):
+        #     reward -= 0.001
 
-        if np.array_equal(self.previous_position, self._agent_location):
-            reward -= 0.001
-
-        return reward - 0.01 * self.footprint - 0.005 * self.iterations, game_over, self.footprint # score is less with each step
-
-
-
-
+        return reward, terminated, truncated # score is less with each step
+    
 
     def check_target_location(self):
         for index in range(len(self._target_locations)):
@@ -278,14 +320,17 @@ class GridWorldEnv(gym.Env):
     def _get_obs(self):
         # print(self._agent_location,"\n", self.matrix,"==============")
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
-        return {
-            "agent": self._agent_location,
-            # "target_locations": self.get_matrix_with_targets(),
-            "target_matrix": self.matrix,
-            # "targets_relative_line": self.check_for_target_line(),
-            # "targets_relative_general": self.check_for_target_general(),
-            "targets_left": len(self._target_locations)
-            }
+        
+        return np.divide(self.matrix, 5) 
+        
+        # return {
+        #     # "agent": self._agent_location,
+        #     # "target_locations": self.get_matrix_with_targets(),
+        #     "target_matrix": np.divide(self.matrix, 5) 
+        #     # "targets_relative_line": self.check_for_target_line(),
+        #     # "targets_relative_general": self.check_for_target_general(),
+        #     # "targets_left": len(self._target_locations)
+        #     }
 
     def _get_info(self):
         return {
@@ -379,7 +424,7 @@ class GridWorldEnv(gym.Env):
             pygame.event.pump()
             pygame.display.update()
 
-            if self.env_steps % 400 == 0: # on every N env step slow down rendering
+            if self.env_steps % 500 == 0: # on every N env step slow down rendering
                 self.clock.tick(1)
             else:
                 # We need to ensure that human-rendering occurs at the predefined framerate.
