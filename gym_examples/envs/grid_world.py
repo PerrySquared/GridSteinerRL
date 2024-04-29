@@ -1,7 +1,10 @@
 import gymnasium as gym
 from gymnasium import spaces
+import matplotlib.pyplot as plt
 import pygame
 import numpy as np
+import torch
+import torchvision.transforms as T
 import random
 import copy
 import sys
@@ -14,13 +17,13 @@ TERMINAL_CELL = 3
 PATH_CELL = 4
 AGENT = 5
 
-RENDER_EACH = 3000000
+RENDER_EACH = 1000
 RESET_EACH = 2000
 
 random.seed(11)
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 0.5}
+    metadata = {"render_modes": ["human"], "render_fps": 1}
 
     def __init__(self, render_mode=None, size=32):
         self.size = size  # The size of the square grid
@@ -33,7 +36,7 @@ class GridWorldEnv(gym.Env):
         self.random_element = 0
         self.env_steps = 0
         
-        self.observation_space = spaces.Box(0, 1, shape=(self.size, self.size), dtype=np.float64)
+        self.observation_space = spaces.Box(0, 1, shape=(144, 144), dtype=np.float64)
         # self.observation_space = spaces.Dict(
         #     {
         #         # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
@@ -244,10 +247,12 @@ class GridWorldEnv(gym.Env):
         if footprint > self.total_footprint: 
             reward -= (1 / (self.size - 2)) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
             self.total_footprint = copy.deepcopy(footprint)
+        else:
+            reward += 0.1
             
         # add reward for collecting _target_locations
         if self.check_target_location():
-            reward += 1 # / self.initial_targets_amount # lessen the reward for collecting single target (dependant on the target amount)
+            reward += 0.9 # / self.initial_targets_amount # lessen the reward for collecting single target (dependant on the target amount)
             
         if len(self._target_locations) == 0: # successful game over
             terminated = True
@@ -255,10 +260,8 @@ class GridWorldEnv(gym.Env):
             
         if self.iterations > 30: # terminated due to excessive amount of steps
             # print("trunc")
-            # reward = -1
+            reward = -1
             truncated = True
-        # if np.array_equal(self.previous_position, self._agent_location):
-        #     reward -= 0.001
 
         return reward, terminated, truncated # score is less with each step
     
@@ -320,8 +323,15 @@ class GridWorldEnv(gym.Env):
     def _get_obs(self):
         # print(self._agent_location,"\n", self.matrix,"==============")
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
+        output_shape = (128, 128)
+        padding = ((8, 8), (8, 8))  # Padding of 2 rows and 2 columns on each side
         
-        return np.divide(self.matrix, 5) 
+        output_array = self.resize(np.divide(self.matrix, 5), output_shape, padding)
+
+        # plt.imshow(output_array)
+        # plt.colorbar()
+        # plt.show()
+        return output_array
         
         # return {
         #     # "agent": self._agent_location,
@@ -332,6 +342,24 @@ class GridWorldEnv(gym.Env):
         #     # "targets_left": len(self._target_locations)
         #     }
 
+    def resize(self, array, output_shape, padding):
+        # Get dimensions of original and new array
+        old_shape = array.shape
+        rows_scale = output_shape[0] // old_shape[0]
+        cols_scale = output_shape[1] // old_shape[1]
+        
+        # Repeat values in rows and columns
+        repeated_rows = np.repeat(array, rows_scale, axis=0)
+        repeated_cols = np.repeat(repeated_rows, cols_scale, axis=1)
+        
+        # Trim to desired shape
+        resized_array = repeated_cols[:output_shape[0], :output_shape[1]]
+        
+        padded_array = np.pad(resized_array, padding, mode='constant', constant_values=0)
+        
+        return padded_array
+        
+    
     def _get_info(self):
         return {
             "agent": self._agent_location,
