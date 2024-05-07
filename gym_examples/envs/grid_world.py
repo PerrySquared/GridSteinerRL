@@ -165,13 +165,13 @@ class GridWorldEnv(gym.Env):
             reward -= (1 / (self.size * 2) ) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
             self.total_footprint = copy.deepcopy(footprint)
         else:
-            reward -= 1
+            reward -= 1 # prevents picking identical actions
             
-        if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over
+        if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
             # reward = 1 # was uncommented
             
-        if self.iterations > 10:
+        if self.iterations > 10: # quit if too many steps
             reward = -1
             truncated = True
 
