@@ -12,19 +12,16 @@ import sys
 import os
 np.set_printoptions(threshold=sys.maxsize)
 
-TRACE_CELL = 1
-INTERSECTION_CELL = 2
-TERMINAL_CELL = 3
-PATH_CELL = 4
-AGENT = 5
+TERMINAL_CELL = 2
+PATH_CELL = 1 
 
-RENDER_EACH = 10000000
-RESET_EACH = 2000
+RENDER_EACH = 10000
+RESET_EACH = 1000
 
 random.seed(11)
 
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 1}
+    metadata = {"render_modes": ["human"], "render_fps": 0.5}
 
     def __init__(self, render_mode=None, size=32):
         self.size = size  # The size of the square grid
@@ -34,29 +31,22 @@ class GridWorldEnv(gym.Env):
         self._agent_location_copy = []
         self._target_locations = []
         self._agent_location = []
-        self.random_element = 0
         self.env_steps = 0
         
         # self.observation_space = spaces.Box(0, 1, shape=(96, 96), dtype=np.float64)
         self.observation_space = spaces.Dict(
             {
-                "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
-                "target_matrix": spaces.Box(0, 1, shape=(96, 96), dtype=np.float64),
-                "targets_relative_line": spaces.Discrete(5),
-                "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(32)
+                "target_matrix": spaces.Box(0, 1, shape=(64, 64), dtype=np.float64),
+                "target_list": spaces.Box(0, self.size - 1, shape=(5,2), dtype=np.int64),
+                # "targets_relative_line": spaces.Discrete(5),
+                # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
+                "targets_left": spaces.Discrete(6)
             }
         )
         
-        self.action_space = spaces.Discrete(4)
-
-        self._action_to_direction = {
-            0: np.array([0, -1]), # up
-            1: np.array([0, 1]), # down
-            2: np.array([-1, 0]), # left
-            3: np.array([1, 0]), # right
-        }
+        self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
         
         render_mode = "human"
         
@@ -76,34 +66,25 @@ class GridWorldEnv(gym.Env):
         
         
     def reset(self, seed=None, options=None):
-        self.matrix = np.zeros((self.size,self.size), dtype=int)
+        self.matrix = np.zeros((self.size,self.size), dtype=np.int64)
         self.iterations = 1
         self.total_footprint = 0
         self.previous_position = np.array([-1, -1])
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
+        self.previous_action = [-1, -1]
+        
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = get_coords_dataset()
-            # self._target_locations_copy = self.get_target_locations_random() 
-            self._agent_location_copy = random.choice(self._target_locations_copy)   
             
-        self._target_locations = copy.deepcopy(self._target_locations_copy)
-        self._agent_location = copy.deepcopy(self._agent_location_copy)
         self.env_steps += 1
-
+        
+        self._target_locations = copy.deepcopy(self._target_locations_copy)
+        
         for _target_location in self._target_locations:
-            self.place_support_nodes(self._target_locations)
             self.matrix[_target_location[0], _target_location[1]] = TERMINAL_CELL
-            
 
-        self.check_target_location() # remove first target that agent is on top of
-        self.initial_targets_amount = len(self._target_locations) # get the amount of targets left
-        
-        """marking current agent position in a matrix and saving its position as previous one to use later"""
-        self.matrix[self._agent_location[0]][self._agent_location[1]] = AGENT
-        self.previous_position = copy.deepcopy(self._agent_location)
-        
         observation = self._get_obs()
         info = self._get_info()
         
@@ -115,37 +96,7 @@ class GridWorldEnv(gym.Env):
 
 
         return observation, info
-    
-    def get_target_locations_random(self):
-        _target_locations = []
-        for i in range(random.randint(2,5)):
-            _target_locations.append(np.array([random.randint(0, self.size - 1), random.randint(0, self.size - 1)]))
-        return _target_locations
-    
-    def place_support_nodes(self, terminals):
-        self.make_path([0, 0], [0, self.size - 1], [0, 1])
-        self.make_path([0, 0], [self.size - 1, 0], [1, 0])
-        self.make_path([0, self.size - 1], [self.size - 1, self.size - 1], [1, 0])
-        self.make_path([self.size - 1, 0], [self.size - 1, self.size - 1], [0, 1])
-
-        for t__ in terminals:
-            self.make_path([t__[0],0], [t__[0], self.size - 1], [0, 1])
-            self.make_path([0,t__[1]], [self.size - 1, t__[1]], [1, 0])
-
-    def make_path(self, iterator, end, step):
-        if(self.matrix[iterator[0], iterator[1]] == INTERSECTION_CELL or self.matrix[iterator[0], iterator[1]] == TERMINAL_CELL):
-            return
-        
-        while(iterator <= end):
-            if(self.matrix[iterator[0], iterator[1]] == TRACE_CELL):
-                self.matrix[iterator[0], iterator[1]] = INTERSECTION_CELL
-            elif(self.matrix[iterator[0],iterator[1]] != TERMINAL_CELL):
-                self.matrix[iterator[0], iterator[1]] = TRACE_CELL
-
-
-            iterator[0] += step[0]
-            iterator[1] += step[1]
-            
+           
 
     def step(self, action):
         # check if exited
@@ -159,22 +110,25 @@ class GridWorldEnv(gym.Env):
         self.iterations += 1
         
         reward = 0
-        not_moved = False
         terminated = False     
         truncated = False
         
-        not_moved = self._move(action) # update the position 
-         
+        self._move(action) # update the position 
+
         reward, terminated, truncated = self.game_over_check()
+
+        same_elem = np.equal(action[0], action[1])
+        if same_elem.all(): # if both elements picked by action are the same
+            reward -= 100
             
-        # print(not_moved)
-        if not_moved:
-            reward = -1
-            
+        action_not_continuous = np.equal(self.previous_action, action)
+        if self.iterations == 1 and not action_not_continuous.any(): # if next action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals)
+            reward -= 100
+        
+        self.previous_action = copy.deepcopy(action)
         
         observation = self._get_obs()
         info = self._get_info()
-        # print("observed\n")
         
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
             print(reward)
@@ -182,145 +136,91 @@ class GridWorldEnv(gym.Env):
                 self._render_frame()
             if self.render_mode == "rgb_array":
                 self._render_frame_as_rgb_array()
-            
+        
         # 6. return game over and score
         return observation, reward, terminated, truncated, info
 
     
-    def _move(self, action):       
-        # Map the action (element of {0,1,2,3}) to the direction we walk in
-        direction = self._action_to_direction[action]
-        # We use `np.clip` to make sure we don't leave the grid
-        _agent_location = copy.deepcopy(self._agent_location)
-        _agent_location = np.clip(_agent_location + direction, 0, self.size - 1)
-
-        if self.matrix[_agent_location[0], _agent_location[1]] != 0:
-            if self.matrix[_agent_location[0], _agent_location[1]] == TRACE_CELL or self.matrix[_agent_location[0], _agent_location[1]] == PATH_CELL:
-                while self.matrix[_agent_location[0], _agent_location[1]] == TRACE_CELL or self.matrix[_agent_location[0], _agent_location[1]] == PATH_CELL:
-                    self.matrix[_agent_location[0], _agent_location[1]] = PATH_CELL
-                    _agent_location = np.clip(_agent_location + direction, 0, self.size - 1)
-        else:
-            return False, True # in case of unexpected movement (if it's even possible) - will shut down the proccess with an error
+    def _move(self, action):
+        first_terminal = self._target_locations[action[0]]
+        second_terminal = self._target_locations[action[1]]     
+        grid_path = self.create_manhattan_path(first_terminal, second_terminal)
         
-        """three lines below are needed to create context in the matrix about agent location,
-        i.e. making current position of an agent a 5 and changing the previous one into 
-        intersection cell remove if not needed along with the one in reset"""
+        self.matrix = self.concatenate_with_override(self.matrix, grid_path)
         
-        self.matrix[self.previous_position[0]][self.previous_position[1]] = INTERSECTION_CELL 
-        self.matrix[_agent_location[0]][_agent_location[1]] = AGENT # agent marked AFTER intersection in case it stays in the same place
-        not_moved = np.array_equal(_agent_location, self.previous_position) # check if agent hasn't moved (due to border clipping)
-        self.previous_position = copy.deepcopy(_agent_location)
-        
-        self._agent_location = _agent_location
-        
-        return not_moved
-
     def game_over_check(self):
-        # print("targets: ", self._target_locations)
         reward = 0
         terminated = False
         truncated = False
         
-        footprint = (self.matrix == PATH_CELL).sum() # how many path cells are there
+        footprint = np.count_nonzero(self.matrix == PATH_CELL) # how many path cells are there
             
         # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
         if footprint > self.total_footprint: 
-            reward -= (1 / self.size) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
+            reward -= footprint - self.total_footprint # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
             self.total_footprint = copy.deepcopy(footprint)
-            self.stagnate_counter = 0
-        else:
-            self.stagnate_counter += 1
-            if self.stagnate_counter > 5:
-                reward = -0.9 # punish walking along the same path endlessly
         
-        # add reward for collecting _target_locations
-        if self.check_target_location():
-            reward += 0.9 # / self.initial_targets_amount # lessen the reward for collecting single target (dependant on the target amount)
-        else:
-            reward -= 0.03 # stimulate searching for targets
             
-        if len(self._target_locations) == 0: # successful game over
+        if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over
             terminated = True
-            reward = 1 # was uncommented
+            reward = 100 # was uncommented
             
-        if self.iterations > 30: # terminated due to excessive amount of steps
-            # print("trunc")
-            reward = -1
+        if self.iterations > 50:
+            reward = -100
             truncated = True
 
         return reward, terminated, truncated # score is less with each step
-    
-
-    def check_target_location(self):
-        for index in range(len(self._target_locations)):
-            if np.array_equal(self._agent_location, self._target_locations[index]):
-                self.matrix[self._agent_location[0], self._agent_location[1]] = INTERSECTION_CELL
-                del self._target_locations[index]
-                return True
-        return False
-    
-        # print(x,y)
-        # print(np.transpose(self.matrix))
-    
-    """extra observation space methods"""
-    
-    def get_matrix_with_targets(self):
-        matrix = np.zeros((self.size, self.size))
-        for target in self._target_locations:
-            matrix[target[0], target[1]] = TERMINAL_CELL
+        
+    def concatenate_with_override(self, arr1, arr2):
+        result = []
+        for i in range(len(arr1)):
+            row = []
+            for j in range(len(arr1[i])):
+                if arr2[i][j] != 0:
+                    row.append(arr2[i][j])
+                else:
+                    row.append(arr1[i][j])
+            result.append(row)
             
-        return matrix
+        return np.asanyarray(result, dtype=int)
+    
+    def create_manhattan_path(self, start, end):
+        # Create an empty grid initialized with zeros
+        grid = [[0 for _ in range(self.size)] for _ in range(self.size)]
+        
+        # Extract coordinates for clarity
+        y1, x1 = start
+        y2, x2 = end
+        
+        # Mark the Manhattan path with 1s
+        # Move horizontally to the correct column
+        for x in range(min(x1, x2), max(x1, x2) + 1):
+            grid[y1][x] = PATH_CELL
+        # Move vertically to the correct row
+        for y in range(min(y1, y2), max(y1, y2) + 1):
+            grid[y][x2] = PATH_CELL
+        
+        return grid
 
-    def check_for_target_general(self):
-        target_relative_positions = np.array([0, 0, 0, 0]) # top, bottom, left, right
-        for x in range(self.size):
-            for y in range(self.size):
-                if self.matrix[x][y] == TERMINAL_CELL and y < self._agent_location[1]:
-                    target_relative_positions[0] = 1
-                if self.matrix[x][y] == TERMINAL_CELL and y > self._agent_location[1]:
-                    target_relative_positions[1] = 1
-        for y in range(self.size):
-            for x in range(self.size):
-                if self.matrix[x][y] == TERMINAL_CELL and x < self._agent_location[0]:
-                    target_relative_positions[2] = 1
-                if self.matrix[x][y] == TERMINAL_CELL and x > self._agent_location[0]:
-                    target_relative_positions[3] = 1
-                    
-        return target_relative_positions
-    
-    def check_for_target_line(self):
-        for y in range(self.size):
-            if self.matrix[self._agent_location[0]][y] == TERMINAL_CELL and y < self._agent_location[1]:
-                return 0 # top
-            if self.matrix[self._agent_location[0]][y] == TERMINAL_CELL and y > self._agent_location[1]:
-                return 1 # bottom
-        for x in range(self.size):
-            if self.matrix[x][self._agent_location[1]] == TERMINAL_CELL and x < self._agent_location[0]:
-                return 2 # left
-            if self.matrix[x][self._agent_location[1]] == TERMINAL_CELL and x > self._agent_location[0]:
-                return 3 # right
-            
-        return 4 # none
-    
 
     """observation and info methods"""
 
     def _get_obs(self):
         # print(self._agent_location,"\n", self.matrix,"==============")
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
-        output_shape = (96, 96)
-        padding = ((8, 8), (8, 8))  # Padding of 2 rows and 2 columns on each side
+        output_shape = (64, 64)
+        padding = ((3, 3), (3, 3))  # Padding of 2 rows and 2 columns on each side
         
-        output_array = self.resize(np.divide(self.matrix, 5), output_shape, padding)
+        output_array = self.resize(np.divide(self.matrix, 2), output_shape, padding)
         # return output_array
-        
         return {
-            "agent": self._agent_location,
+            # "agent": self._agent_location,
             # "target_locations": self.get_matrix_with_targets(),
             "target_matrix": output_array,
-            "targets_relative_line": self.check_for_target_line(),
-            "targets_relative_general": self.check_for_target_general(),
-            "targets_left": len(self._target_locations)
+            "target_list": np.array(self._target_locations, dtype=np.int64),
+            # "targets_relative_line": self.check_for_target_line(),
+            # "targets_relative_general": self.check_for_target_general(),
+            "targets_left": np.count_nonzero(self.matrix == TERMINAL_CELL)
             }
 
     def resize(self, array, output_shape, padding):
@@ -346,6 +246,18 @@ class GridWorldEnv(gym.Env):
             "agent": self._agent_location,
             "target_matrix": self.matrix
             }
+    
+    
+    """extra observation space methods"""
+    
+    def get_matrix_with_targets(self):
+        matrix = np.zeros((self.size, self.size))
+        for target in self._target_locations:
+            matrix[target[0], target[1]] = TERMINAL_CELL
+            
+        return matrix
+    
+
 
     """render methods"""
 
@@ -380,14 +292,8 @@ class GridWorldEnv(gym.Env):
         for i in range(len(self.matrix)):
             for j in range(len(self.matrix)):
                 color = None
-                if self.matrix[i, j] == TRACE_CELL:
-                    color = (100, 0, 0)
-                elif self.matrix[i, j] == PATH_CELL:
+                if self.matrix[i, j] == PATH_CELL:
                     color = (0, 0, 150)
-                elif self.matrix[i, j] == INTERSECTION_CELL:
-                    color = (0, 255, 0)
-                elif self.matrix[i, j] == AGENT:
-                    color = (0, 100, 0)
                 if color:
                     pygame.draw.rect(
                         canvas,
@@ -403,12 +309,6 @@ class GridWorldEnv(gym.Env):
         text_surface = font.render(str(self.env_steps), True, (0, 0, 255))  # Render the text
         canvas.blit(text_surface, (10, 10))  # Blit the text onto the canvas
 
-        pygame.draw.circle(
-            canvas,
-            (0, 0, 255),
-            (self._agent_location + 0.5) * pix_square_size,
-            pix_square_size / 3,
-        )
         
         # Finally, add some gridlines
         for x in range(self.size + 1):
@@ -444,93 +344,86 @@ class GridWorldEnv(gym.Env):
                 np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
             )
 
-    import numpy as np
 
 
-    def _render_frame_as_rgb_array(self): # not working yet
+    # def _render_frame_as_rgb_array(self): # not working yet
         
-        if self.window is None and self.render_mode == "rgb_array":
-            pygame.init()
-            pygame.display.init()
-            self.window = pygame.display.set_mode(
-                (self.window_size, self.window_size)
-            )
-        if self.clock is None and self.render_mode == "rgb_array":
-            self.clock = pygame.time.Clock()
+    #     if self.window is None and self.render_mode == "rgb_array":
+    #         pygame.init()
+    #         pygame.display.init()
+    #         self.window = pygame.display.set_mode(
+    #             (self.window_size, self.window_size)
+    #         )
+    #     if self.clock is None and self.render_mode == "rgb_array":
+    #         self.clock = pygame.time.Clock()
             
-        canvas = pygame.Surface((self.window_size, self.window_size))
-        canvas.fill((255, 255, 255))
-        pix_square_size = self.window_size / self.size  # The size of a single grid square in pixels
+    #     canvas = pygame.Surface((self.window_size, self.window_size))
+    #     canvas.fill((255, 255, 255))
+    #     pix_square_size = self.window_size / self.size  # The size of a single grid square in pixels
 
-        # Draw the target
-        for _target_location in self._target_locations:
-            pygame.draw.rect(
-                canvas,
-                (255, 0, 0),
-                pygame.Rect(
-                    pix_square_size * _target_location,
-                    (pix_square_size, pix_square_size),
-                ),
-            )
+    #     # Draw the target
+    #     for _target_location in self._target_locations:
+    #         pygame.draw.rect(
+    #             canvas,
+    #             (255, 0, 0),
+    #             pygame.Rect(
+    #                 pix_square_size * _target_location,
+    #                 (pix_square_size, pix_square_size),
+    #             ),
+    #         )
 
-        font = pygame.font.Font(None, 24)  # Choose a font and size
-        text_surface = font.render(str(self.env_steps), True, (0, 0, 255))  # Render the text
-        canvas.blit(text_surface, (10, 10))  # Blit the text onto the canvas
+    #     font = pygame.font.Font(None, 24)  # Choose a font and size
+    #     text_surface = font.render(str(self.env_steps), True, (0, 0, 255))  # Render the text
+    #     canvas.blit(text_surface, (10, 10))  # Blit the text onto the canvas
 
-        # Draw the agent and other elements
-        for i in range(len(self.matrix)):
-            for j in range(len(self.matrix)):
-                color = None
-                if self.matrix[i, j] == TRACE_CELL:
-                    color = (100, 0, 0)
-                elif self.matrix[i, j] == PATH_CELL:
-                    color = (0, 0, 150)
-                elif self.matrix[i, j] == INTERSECTION_CELL:
-                    color = (0, 255, 0)
-                elif self.matrix[i, j] == AGENT:
-                    color = (0, 100, 0)
-                if color:
-                    pygame.draw.rect(
-                        canvas,
-                        color,
-                        pygame.Rect(
-                            pix_square_size * np.array([i, j]),
-                            (pix_square_size, pix_square_size),
-                        ),
-                    )
+    #     # Draw the agent and other elements
+    #     for i in range(len(self.matrix)):
+    #         for j in range(len(self.matrix)):
+    #             color = None
+    #             if self.matrix[i, j] == PATH_CELL:
+    #                 color = (0, 0, 150)
+    #             if color:
+    #                 pygame.draw.rect(
+    #                     canvas,
+    #                     color,
+    #                     pygame.Rect(
+    #                         pix_square_size * np.array([i, j]),
+    #                         (pix_square_size, pix_square_size),
+    #                     ),
+    #                 )
 
-        pygame.draw.circle(
-            canvas,
-            (0, 0, 255),
-            (self._agent_location + 0.5) * pix_square_size,
-            int(pix_square_size / 3),
-        )
+    #     pygame.draw.circle(
+    #         canvas,
+    #         (0, 0, 255),
+    #         (self._agent_location + 0.5) * pix_square_size,
+    #         int(pix_square_size / 3),
+    #     )
 
-        # Add gridlines
-        for x in range(self.size + 1):
-            pygame.draw.line(
-                canvas,
-                0,
-                (0, pix_square_size * x),
-                (self.window_size, pix_square_size * x),
-                width=1,
-            )
-            pygame.draw.line(
-                canvas,
-                0,
-                (pix_square_size * x, 0),
-                (pix_square_size * x, self.window_size),
-                width=1,
-            )
+    #     # Add gridlines
+    #     for x in range(self.size + 1):
+    #         pygame.draw.line(
+    #             canvas,
+    #             0,
+    #             (0, pix_square_size * x),
+    #             (self.window_size, pix_square_size * x),
+    #             width=1,
+    #         )
+    #         pygame.draw.line(
+    #             canvas,
+    #             0,
+    #             (pix_square_size * x, 0),
+    #             (pix_square_size * x, self.window_size),
+    #             width=1,
+    #         )
 
-        self.clock.tick(self.metadata["render_fps"])
+    #     self.clock.tick(self.metadata["render_fps"])
         
-        return np.transpose(
-            np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
-        )
+    #     return np.transpose(
+    #         np.array(pygame.surfarray.pixels3d(canvas)), axes=(1, 0, 2)
+    #     )
 
 
-    def close(self):
-        if self.window is not None:
-            pygame.display.quit()
-            pygame.quit()
+    # def close(self):
+    #     if self.window is not None:
+    #         pygame.display.quit()
+    #         pygame.quit()
