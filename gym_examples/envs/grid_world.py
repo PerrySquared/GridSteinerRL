@@ -1,5 +1,6 @@
-import gymnasium as gym
 from gymnasium import spaces
+from .utils.dataset_extractor import get_coords_dataset
+import gymnasium as gym
 import matplotlib.pyplot as plt
 import pygame
 import numpy as np
@@ -17,7 +18,7 @@ TERMINAL_CELL = 3
 PATH_CELL = 4
 AGENT = 5
 
-RENDER_EACH = 100000
+RENDER_EACH = 10000000
 RESET_EACH = 2000
 
 random.seed(11)
@@ -44,7 +45,7 @@ class GridWorldEnv(gym.Env):
                 "target_matrix": spaces.Box(0, 1, shape=(96, 96), dtype=np.float64),
                 "targets_relative_line": spaces.Discrete(5),
                 "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(5)
+                "targets_left": spaces.Discrete(32)
             }
         )
         
@@ -83,12 +84,12 @@ class GridWorldEnv(gym.Env):
         self.stagnate_counter = 0
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
-            self._target_locations_copy = self.get_target_locations()
+            self._target_locations_copy = get_coords_dataset()
+            # self._target_locations_copy = self.get_target_locations_random() 
             self._agent_location_copy = random.choice(self._target_locations_copy)   
             
         self._target_locations = copy.deepcopy(self._target_locations_copy)
         self._agent_location = copy.deepcopy(self._agent_location_copy)
-
         self.env_steps += 1
 
         for _target_location in self._target_locations:
@@ -115,7 +116,7 @@ class GridWorldEnv(gym.Env):
 
         return observation, info
     
-    def get_target_locations(self):
+    def get_target_locations_random(self):
         _target_locations = []
         for i in range(random.randint(2,5)):
             _target_locations.append(np.array([random.randint(0, self.size - 1), random.randint(0, self.size - 1)]))
