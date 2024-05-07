@@ -15,7 +15,7 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 10000
+RENDER_EACH = 100000
 RESET_EACH = 1000
 
 random.seed(11)
@@ -67,9 +67,8 @@ class GridWorldEnv(gym.Env):
         
     def reset(self, seed=None, options=None):
         self.matrix = np.zeros((self.size,self.size), dtype=np.int64)
-        self.iterations = 1
+        self.iterations = 0
         self.total_footprint = 0
-        self.previous_position = np.array([-1, -1])
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
         self.previous_action = [-1, -1]
@@ -118,12 +117,18 @@ class GridWorldEnv(gym.Env):
         reward, terminated, truncated = self.game_over_check()
 
         same_elem = np.equal(action[0], action[1])
-        if same_elem.all(): # if both elements picked by action are the same
-            reward -= 100
+        # if both elements picked by action are the same to prevent just picking the terminals
+        if same_elem.all(): 
+            reward -= 1
+
+        action_continuous = np.equal(np.sort(self.previous_action), np.sort(action))
+        # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
+        if self.iterations > 1 and not action_continuous.any(): 
+            reward -= 1
             
-        action_not_continuous = np.equal(self.previous_action, action)
-        if self.iterations == 1 and not action_not_continuous.any(): # if next action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals)
-            reward -= 100
+        # if connects same terminals in a different order
+        if action_continuous.all():
+            reward -= 1
         
         self.previous_action = copy.deepcopy(action)
         
@@ -136,7 +141,7 @@ class GridWorldEnv(gym.Env):
                 self._render_frame()
             if self.render_mode == "rgb_array":
                 self._render_frame_as_rgb_array()
-        
+
         # 6. return game over and score
         return observation, reward, terminated, truncated, info
 
@@ -157,16 +162,17 @@ class GridWorldEnv(gym.Env):
             
         # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
         if footprint > self.total_footprint: 
-            reward -= footprint - self.total_footprint # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
+            reward -= (1 / (self.size * 2) ) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
             self.total_footprint = copy.deepcopy(footprint)
-        
+        else:
+            reward -= 1
             
         if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over
             terminated = True
-            reward = 100 # was uncommented
+            # reward = 1 # was uncommented
             
-        if self.iterations > 50:
-            reward = -100
+        if self.iterations > 10:
+            reward = -1
             truncated = True
 
         return reward, terminated, truncated # score is less with each step
@@ -243,7 +249,7 @@ class GridWorldEnv(gym.Env):
     
     def _get_info(self):
         return {
-            "agent": self._agent_location,
+            # "agent": self._agent_location,
             "target_matrix": self.matrix
             }
     
