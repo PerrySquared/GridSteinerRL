@@ -15,10 +15,10 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 100000
-RESET_EACH = 1000
+RENDER_EACH = 10000000000
+RESET_EACH = 3000
 
-random.seed(11)
+random.seed(12)
 
 class GridWorldEnv(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 0.5}
@@ -38,7 +38,7 @@ class GridWorldEnv(gym.Env):
             {
                 # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
-                "target_matrix": spaces.Box(0, 1, shape=(64, 64), dtype=np.float64),
+                "target_matrix": spaces.Box(0, 1, shape=(32, 32), dtype=np.float64),
                 "target_list": spaces.Box(0, self.size - 1, shape=(5,2), dtype=np.int64),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
@@ -71,7 +71,7 @@ class GridWorldEnv(gym.Env):
         self.total_footprint = 0
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
-        self.previous_action = [-1, -1]
+        self.previous_actions = []
         
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
@@ -111,7 +111,6 @@ class GridWorldEnv(gym.Env):
         reward = 0
         terminated = False     
         truncated = False
-        
         self._move(action) # update the position 
 
         reward, terminated, truncated = self.game_over_check()
@@ -120,17 +119,16 @@ class GridWorldEnv(gym.Env):
         # if both elements picked by action are the same to prevent just picking the terminals
         if same_elem.all(): 
             reward -= 1
-
-        action_continuous = np.equal(np.sort(self.previous_action), np.sort(action))
+        
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
-        if self.iterations > 1 and not action_continuous.any(): 
+        if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
             reward -= 1
             
         # if connects same terminals in a different order
-        if action_continuous.all():
+        if self.is_identical_to_previous(action, self.previous_actions):
             reward -= 1
-        
-        self.previous_action = copy.deepcopy(action)
+
+        self.previous_actions.append(action)
         
         observation = self._get_obs()
         info = self._get_info()
@@ -162,21 +160,37 @@ class GridWorldEnv(gym.Env):
             
         # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
         if footprint > self.total_footprint: 
-            reward -= (1 / (self.size * 2) ) * (footprint - self.total_footprint) # roughly 1/30th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
+            # roughly 1/60th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
+            reward -= (1 / self.size ) * (footprint - self.total_footprint)
             self.total_footprint = copy.deepcopy(footprint)
         else:
-            reward -= 1 # prevents picking identical actions
+            reward -= 1 # prevents picking actions that cause no difference to the grid
             
         if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
             # reward = 1 # was uncommented
             
         if self.iterations > 10: # quit if too many steps
-            reward = -1
+            reward -= 1
             truncated = True
 
         return reward, terminated, truncated # score is less with each step
-        
+
+
+    def is_connected_to_previous(self, pair, previous_pairs):
+        # Check if the pair is connected to any of the previous pairs
+        for prev_pair in previous_pairs:
+            if pair[0] == prev_pair[0] or pair[1] == prev_pair[0] or pair[0] == prev_pair[1] or pair[1] == prev_pair[1]:
+                return True
+        return False
+
+    def is_identical_to_previous(self, pair, previous_pairs):
+        # Check if the pair is identical to any of the previous ones in any order
+        for prev_pair in previous_pairs:
+            if (pair[0] == prev_pair[0] and pair[1] == prev_pair[1]) or (pair[0] == prev_pair[1] and pair[1] == prev_pair[0]):
+                return True
+        return False
+    
     def concatenate_with_override(self, arr1, arr2):
         result = []
         for i in range(len(arr1)):
@@ -214,7 +228,7 @@ class GridWorldEnv(gym.Env):
     def _get_obs(self):
         # print(self._agent_location,"\n", self.matrix,"==============")
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
-        output_shape = (64, 64)
+        output_shape = (32, 32)
         padding = ((3, 3), (3, 3))  # Padding of 2 rows and 2 columns on each side
         
         output_array = self.resize(np.divide(self.matrix, 2), output_shape, padding)
