@@ -1,5 +1,5 @@
 # GridPathing
-
+- not accepting PRs due to personal nature of the project, sorry
 ## General Information
 - Goal of this currently WiP project is to create an RL (currently A2C) approach to solve steiner trees
 - Support up to 5 targets (currently)
