@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 10000000000
-RESET_EACH = 3000
+RENDER_EACH = 1
+RESET_EACH = 1
 
 random.seed(12)
 
@@ -43,6 +43,7 @@ class GridWorldEnv(gym.Env):
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
                 "targets_left": spaces.Discrete(6)
+                # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
             }
         )
         
@@ -66,16 +67,18 @@ class GridWorldEnv(gym.Env):
         
         
     def reset(self, seed=None, options=None):
-        self.matrix = np.zeros((self.size,self.size), dtype=np.int64)
+        self.matrix = np.zeros((self.size,self.size), dtype=np.int64) # might be not needed after overflow class realization
         self.iterations = 0
         self.total_footprint = 0
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
         self.previous_actions = []
+        # call for overflow class to create local overflow matrix
         
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
-            self._target_locations_copy = get_coords_dataset()
+            # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
+            self._target_locations_copy = get_coords_dataset() 
             
         self.env_steps += 1
         
@@ -141,15 +144,18 @@ class GridWorldEnv(gym.Env):
                 self._render_frame_as_rgb_array()
 
         # 6. return game over and score
+
+        # !!! if terminated or truncated add local overflow to general overflow (dependent on the amount of repeats for a single env, i.e. save best or latest out of RESET_EACH)
         return observation, reward, terminated, truncated, info
 
     
     def _move(self, action):
         first_terminal = self._target_locations[action[0]]
         second_terminal = self._target_locations[action[1]]     
-        grid_path = self.create_manhattan_path(first_terminal, second_terminal)
+        grid_path = self.create_manhattan_path(first_terminal, second_terminal) # (swap for method in the overflow matrix later)
         
-        self.matrix = self.concatenate_with_override(self.matrix, grid_path)
+        self.matrix = self.concatenate_with_override(self.matrix, grid_path) # adds a slinge L-shape to the local matrix (not needed after overflow methods realization, there is an integrated local matrix in the class init)
+        
         
     def game_over_check(self):
         reward = 0
@@ -157,6 +163,8 @@ class GridWorldEnv(gym.Env):
         truncated = False
         
         footprint = np.count_nonzero(self.matrix == PATH_CELL) # how many path cells are there
+
+        # !!! integrate overflow reward calculation
             
         # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
         if footprint > self.total_footprint: 

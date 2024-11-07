@@ -47,6 +47,8 @@ class OverflowWithOverlap():
     def get_overflow_reference_matrix(self):
 
         # some code to get a cutout of a standertized shape from general overflow matrix in required place
+        # rewrite dataser_extractor in a way that gets the origin coordinates of the cutout to later place 
+        # the local overflow matrix into the global matrix
         overflow_reference_matrix = True
 
         return overflow_reference_matrix
@@ -66,35 +68,44 @@ class OverflowWithOverlap():
                 two points), depends on the refernce from global overflow 
                 (a standartized shape cutout of general overflow matrix)
                 """
-                path_sum += overflow_reference_matrix[y1][x] 
                 # swap OVERFLOW_VALUE for overflow_reference_matrix[y1][x] or similar to get a local overflow matrix with values from reference matrix 
+                if self.local_overflow_matrix[y1][x] == 0:
+                    path_sum += overflow_reference_matrix[y1][x]
                 self.local_overflow_matrix[y1][x] = OVERFLOW_VALUE 
             # Sum the values moving down
             for y in range(y1 + 1, y2 + 1):
-                path_sum += overflow_reference_matrix[y][x2]
+                if self.local_overflow_matrix[y][x2] == 0:
+                    path_sum += overflow_reference_matrix[y][x2]
                 self.local_overflow_matrix[y][x2] = OVERFLOW_VALUE
 
         if y1 > y2:
             # Move down first
             # Sum the values moving down
             for y in range(y2, y1):
-                path_sum += overflow_reference_matrix[y][x2]
+                if self.local_overflow_matrix[y][x2] == 0:
+                    path_sum += overflow_reference_matrix[y][x2]
                 self.local_overflow_matrix[y][x2] = OVERFLOW_VALUE
             # Sum the values moving right
             for x in range(min(x1, x2), max(x1 + 1, x2 + 1)):
-                path_sum += overflow_reference_matrix[y1][x]
+                if self.local_overflow_matrix[y1][x] == 0:
+                    path_sum += overflow_reference_matrix[y1][x]
                 self.local_overflow_matrix[y1][x] = OVERFLOW_VALUE
 
-        print(np.asarray(self.local_overflow_matrix))
 
-
-        return path_sum
+        return path_sum, self.local_overflow_matrix
 
     def get_both_manhattan_paths_sums(self, matrix, start, finish):
-        path_1 = self.get_manhattan_path(matrix, start, finish)
-        path_2 = self.get_manhattan_path(matrix, finish, start)
+        path_1, matrix_1 = self.get_manhattan_path(matrix, start, finish)
+        path_2, matrix_2 = self.get_manhattan_path(matrix, finish, start)
 
-        return path_1, path_2
+        if path_1 > path_2:
+            smaller_overflow = path_2
+            smaller_overflow_matrix = matrix_2
+        else:
+            smaller_overflow = path_1
+            smaller_overflow_matrix = matrix_1
+
+        return smaller_overflow, smaller_overflow_matrix
 
     def add_path_section_to_path_only_matrix(self, cell):
         x, y = cell
@@ -106,8 +117,9 @@ print(c.get_manhattan_path(matrix, (3,5), (8,9)))
 print(c.get_manhattan_path(matrix, (8,9), (10,3)))
 print(c.get_manhattan_path(matrix, (10,3), (6,2)))
 print(c.get_manhattan_path(matrix, (6,2), (1,7)))
+print(c.get_manhattan_path(matrix, (1,7), (6,0)))
 
-# print(get_both_get_manhattan_paths(matrix, (8,9), (13,5)))
+# print(c.get_both_get_manhattan_paths(matrix, (8,9), (13,5)))
 # print(get_both_get_manhattan_paths(matrix, (8,9), (3,15)))
 # print(get_both_get_manhattan_paths(matrix, (8,9), (13,15)))
 
