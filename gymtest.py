@@ -32,9 +32,9 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 2
+    PROCESSES_TO_TEST = 1
     NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 10000000
+    TRAIN_STEPS = 10
     EVAL_EPS = 4
     ALGO = PPO
 
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     # otherwise, you may have memory issues when running a lot of experiments
     train_env.close()
     
-    model.save("ppo_model")
-    print("\nMODEL SAVED\n")
+    # model.save("ppo_model")
+    # print("\nMODEL SAVED\n")
     
     reward_averages.append(np.mean(rewards))
     reward_std.append(np.std(rewards))

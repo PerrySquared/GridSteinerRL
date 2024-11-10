@@ -1,4 +1,5 @@
 from gymnasium import spaces
+from overflow import OverflowWithOverlap
 from .utils.dataset_extractor import get_coords_dataset
 import gymnasium as gym
 import matplotlib.pyplot as plt
@@ -20,8 +21,10 @@ RESET_EACH = 1
 
 random.seed(12)
 
+TEMP_GENERAL_OVERFLOW = np.zeros((32,32), dtype=np.int64)
+
 class GridWorldEnv(gym.Env):
-    metadata = {"render_modes": ["human"], "render_fps": 0.5}
+    metadata = {"render_modes": ["human"], "render_fps": 1}
 
     def __init__(self, render_mode=None, size=32):
         self.size = size  # The size of the square grid
@@ -42,8 +45,9 @@ class GridWorldEnv(gym.Env):
                 "target_list": spaces.Box(0, self.size - 1, shape=(5,2), dtype=np.int64),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(6)
+                "targets_left": spaces.Discrete(6),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
+                "reference_overflow_matrix": spaces.Box(0, np.inf, shape=(32, 32), dtype=np.float64),
             }
         )
         
@@ -67,13 +71,15 @@ class GridWorldEnv(gym.Env):
         
         
     def reset(self, seed=None, options=None):
-        self.matrix = np.zeros((self.size,self.size), dtype=np.int64) # might be not needed after overflow class realization
+        self.matrix_with_targets = np.zeros((self.size,self.size), dtype=np.int64) # might be not needed after overflow class realization
         self.iterations = 0
         self.total_footprint = 0
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
         self.previous_actions = []
         # call for overflow class to create local overflow matrix
+        self.empty_overflow = np.zeros((self.size,self.size), dtype=np.int64)
+        self.Overflow = OverflowWithOverlap(self.empty_overflow, 32, 32)
         
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
@@ -85,7 +91,7 @@ class GridWorldEnv(gym.Env):
         self._target_locations = copy.deepcopy(self._target_locations_copy)
         
         for _target_location in self._target_locations:
-            self.matrix[_target_location[0], _target_location[1]] = TERMINAL_CELL
+            self.matrix_with_targets[_target_location[0], _target_location[1]] = TERMINAL_CELL
 
         observation = self._get_obs()
         info = self._get_info()
@@ -135,6 +141,9 @@ class GridWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
+        print("================================================")
+        # print(info)
+        # print(TEMP_GENERAL_OVERFLOW)
         
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
             print(reward)
@@ -146,23 +155,32 @@ class GridWorldEnv(gym.Env):
         # 6. return game over and score
 
         # !!! if terminated or truncated add local overflow to general overflow (dependent on the amount of repeats for a single env, i.e. save best or latest out of RESET_EACH)
+        if terminated or truncated:
+            global TEMP_GENERAL_OVERFLOW
+            TEMP_GENERAL_OVERFLOW += self.matrix_with_targets
+            # print(TEMP_GENERAL_OVERFLOW)
+        
         return observation, reward, terminated, truncated, info
 
     
     def _move(self, action):
         first_terminal = self._target_locations[action[0]]
         second_terminal = self._target_locations[action[1]]     
-        grid_path = self.create_manhattan_path(first_terminal, second_terminal) # (swap for method in the overflow matrix later)
+        # grid_path = self.create_manhattan_path(first_terminal, second_terminal) # (swap for method in the overflow matrix later)
         
-        self.matrix = self.concatenate_with_override(self.matrix, grid_path) # adds a slinge L-shape to the local matrix (not needed after overflow methods realization, there is an integrated local matrix in the class init)
-        
+        step_overflow, path_matrix = self.Overflow.get_manhattan_path(TEMP_GENERAL_OVERFLOW, first_terminal, second_terminal)
+        self.matrix_with_targets = self.concatenate_with_override(self.matrix_with_targets, path_matrix) # adds a slinge L-shape to the local matrix (not needed after overflow methods realization, there is an integrated local matrix in the class init)
+        print("=======================")
+        # print(self.matrix_with_targets)
+        # print(step_overflow)
+        # print(TEMP_GENERAL_OVERFLOW)
         
     def game_over_check(self):
         reward = 0
         terminated = False
         truncated = False
         
-        footprint = np.count_nonzero(self.matrix == PATH_CELL) # how many path cells are there
+        footprint = np.count_nonzero(self.matrix_with_targets == PATH_CELL) # how many path cells are there
 
         # !!! integrate overflow reward calculation
             
@@ -174,7 +192,7 @@ class GridWorldEnv(gym.Env):
         else:
             reward -= 1 # prevents picking actions that cause no difference to the grid
             
-        if np.count_nonzero(self.matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
+        if np.count_nonzero(self.matrix_with_targets == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
             # reward = 1 # was uncommented
             
@@ -212,34 +230,34 @@ class GridWorldEnv(gym.Env):
             
         return np.asanyarray(result, dtype=int)
     
-    def create_manhattan_path(self, start, end):
-        # Create an empty grid initialized with zeros
-        grid = [[0 for _ in range(self.size)] for _ in range(self.size)]
+    # def create_manhattan_path(self, start, end):
+    #     # Create an empty grid initialized with zeros
+    #     grid = [[0 for _ in range(self.size)] for _ in range(self.size)]
         
-        # Extract coordinates for clarity
-        y1, x1 = start
-        y2, x2 = end
+    #     # Extract coordinates for clarity
+    #     y1, x1 = start
+    #     y2, x2 = end
         
-        # Mark the Manhattan path with 1s
-        # Move horizontally to the correct column
-        for x in range(min(x1, x2), max(x1, x2) + 1):
-            grid[y1][x] = PATH_CELL
-        # Move vertically to the correct row
-        for y in range(min(y1, y2), max(y1, y2) + 1):
-            grid[y][x2] = PATH_CELL
+    #     # Mark the Manhattan path with 1s
+    #     # Move horizontally to the correct column
+    #     for x in range(min(x1, x2), max(x1, x2) + 1):
+    #         grid[y1][x] = PATH_CELL
+    #     # Move vertically to the correct row
+    #     for y in range(min(y1, y2), max(y1, y2) + 1):
+    #         grid[y][x2] = PATH_CELL
         
-        return grid
+    #     return grid
 
 
     """observation and info methods"""
 
     def _get_obs(self):
-        # print(self._agent_location,"\n", self.matrix,"==============")
+        # print(self._agent_location,"\n", self.matrix_with_targets,"==============")
         # print({"targets_relative_line": self.check_for_target_line(), "targets_relative_general": self.check_for_target_general()})
         output_shape = (32, 32)
         padding = ((3, 3), (3, 3))  # Padding of 2 rows and 2 columns on each side
         
-        output_array = self.resize(np.divide(self.matrix, 2), output_shape, padding)
+        output_array = self.resize(np.divide(self.matrix_with_targets, 2), output_shape, padding)
         # return output_array
         return {
             # "agent": self._agent_location,
@@ -248,7 +266,8 @@ class GridWorldEnv(gym.Env):
             "target_list": np.array(self._target_locations, dtype=np.int64),
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
-            "targets_left": np.count_nonzero(self.matrix == TERMINAL_CELL)
+            "targets_left": np.count_nonzero(self.matrix_with_targets == TERMINAL_CELL),
+            "reference_overflow_matrix": self.Overflow.local_overflow_matrix,
             }
 
     def resize(self, array, output_shape, padding):
@@ -272,7 +291,8 @@ class GridWorldEnv(gym.Env):
     def _get_info(self):
         return {
             # "agent": self._agent_location,
-            "target_matrix": self.matrix
+            "target_matrix": self.matrix_with_targets,
+             "reference_overflow_matrix": self.Overflow.local_overflow_matrix
             }
     
     
@@ -317,10 +337,10 @@ class GridWorldEnv(gym.Env):
             )
                     
         # draw the global elements     
-        for i in range(len(self.matrix)):
-            for j in range(len(self.matrix)):
+        for i in range(len(self.matrix_with_targets)):
+            for j in range(len(self.matrix_with_targets)):
                 color = None
-                if self.matrix[i, j] == PATH_CELL:
+                if self.matrix_with_targets[i, j] == PATH_CELL:
                     color = (0, 0, 150)
                 if color:
                     pygame.draw.rect(
@@ -405,10 +425,10 @@ class GridWorldEnv(gym.Env):
     #     canvas.blit(text_surface, (10, 10))  # Blit the text onto the canvas
 
     #     # Draw the agent and other elements
-    #     for i in range(len(self.matrix)):
-    #         for j in range(len(self.matrix)):
+    #     for i in range(len(self.matrix_with_targets)):
+    #         for j in range(len(self.matrix_with_targets)):
     #             color = None
-    #             if self.matrix[i, j] == PATH_CELL:
+    #             if self.matrix_with_targets[i, j] == PATH_CELL:
     #                 color = (0, 0, 150)
     #             if color:
     #                 pygame.draw.rect(
