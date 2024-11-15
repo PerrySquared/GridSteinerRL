@@ -23,30 +23,49 @@ def get_coordinates(matrix):
     return coordinates
 
 
-def get_coords_dataset():
+def get_coords_dataset(start):
     # Open the HDF5 file
-    with h5py.File('D:/PROJECTS/Python_projects/gym-examples-main/gym_examples/envs/utils/dataset_no_duplicates.h5', 'r') as f:
-        # Get the keys of datasets in the file
-        dataset_keys = list(f.keys())
+    with h5py.File('D:/PROJECTS/Python_projects/gym-examples-main/gym_examples/envs/utils/dataset.h5', 'r') as f:
         
-        # Choose a random dataset
-        random_dataset_key = random.choice(dataset_keys)
+        group_keys = list(f.keys())
         
-        # Extract the matrix from the random dataset
-        matrix = np.zeros([MATRIX_SIZE, MATRIX_SIZE])
-        matrix = f[random_dataset_key][()]
-        
-        # Check if the matrix has MATRIX_SIZE rows or less and MATRIX_SIZE columns or less
-        if matrix.shape[0] <= MATRIX_SIZE and matrix.shape[1] <= MATRIX_SIZE and np.count_nonzero(matrix == 1) == 5:
-            # Pad the matrix if necessary
-            pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])), (0, max(0, MATRIX_SIZE - matrix.shape[1])))
-            padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
+        for i in range(start, len(group_keys)):
+            # Access the group
 
-            # print(padded_matrix)
-            return get_coordinates(padded_matrix)
-        else:
-            return get_coords_dataset()
-    
+            key = group_keys[i]
+            group = f[key]
+            # Extract the matrix from the random dataset
+            matrix = np.zeros([MATRIX_SIZE, MATRIX_SIZE])
+            matrix = group[key][:]  # Access the "data" dataset within the group
+            
+            # plt.imshow(matrix)
+            # plt.show()
+            
+            net_name = group.attrs.get("net_name", "Unknown")
+            insertion_coords = group.attrs.get("insertion_coords", (0, 0))
+            origin_shape = group.attrs.get("origin_shape", (0, 0))
+
+            # Check if the matrix has MATRIX_SIZE rows or less and MATRIX_SIZE columns or less
+            if matrix.shape[0] <= MATRIX_SIZE and matrix.shape[1] <= MATRIX_SIZE and np.count_nonzero(matrix == 1) <= 5 and np.count_nonzero(matrix == 1) >= 2:
+                # Pad the matrix if necessary
+                pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])), (0, max(0, MATRIX_SIZE - matrix.shape[1])))
+                padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
+                # plt.imshow(padded_matrix)
+                # plt.show() 
+                
+                # print(get_coordinates(padded_matrix), net_name, insertion_coords, origin_shape, i)
+                return get_coordinates(padded_matrix), net_name, insertion_coords, origin_shape, i
+            # else:
+            #     pass
+            #     # return get_coords_dataset()
+
+
+# import nexusformat.nexus as nx
+# f = nx.nxload('./utils/dataset.h5')
+# print(f.tree)
+
+# get_coords_dataset(0)
+
 # if __name__ == "__main__":
 #     cur_max = 0
     
