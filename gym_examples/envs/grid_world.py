@@ -15,8 +15,10 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 500
-RESET_EACH = 100
+RENDER_EACH = 10000000000
+RESET_EACH = 1000
+
+TARGETS_TOTAL = 2
 
 LOCAL_AREA_SIZE = 32
 
@@ -73,7 +75,6 @@ class GridWorldEnv(gym.Env):
         
         
     def reset(self, seed=None, options=None):
-        # self.local_overflow_empty = np.zeros((self.size,self.size), dtype=np.int64) # might be not needed after overflow class realization
         self.iterations = 0
         self.successful_path = False
         self.total_footprint = 0
@@ -81,23 +82,28 @@ class GridWorldEnv(gym.Env):
         self.stagnate_counter = 0
         self.previous_actions = []
         # call for overflow class to create local overflow matrix
-        # self.empty_overflow = np.zeros((self.size,self.size), dtype=np.float64) # swap for general ovwerflow
         self.Overflow = OverflowWithOverlap(TEMP_GENERAL_OVERFLOW, LOCAL_AREA_SIZE, LOCAL_AREA_SIZE)
-        
-        # self.net_name = ""
-        # self.insertion_coords = []
-        # self.origin_shape = []
+
+        global RESET_EACH
+        global TARGETS_TOTAL
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((5,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1)        
             
-            self._target_locations_copy[:len(temp_target_locations_copy)] = temp_target_locations_copy
-            # print(self._target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index)
-            # plt.imshow(TEMP_GENERAL_OVERFLOW)
-            # plt.show()
-            
+            TARGETS_TOTAL = len(temp_target_locations_copy)
+            self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
+        
+        match TARGETS_TOTAL:
+            case 3:
+                RESET_EACH = 4000
+            case 4:
+                RESET_EACH = 8000
+            case 5:
+                RESET_EACH = 16000
+            case _:
+                RESET_EACH = 1000
             
         self.env_steps += 1
         
@@ -137,12 +143,12 @@ class GridWorldEnv(gym.Env):
         reward = 0
         terminated = False     
         truncated = False
-        
-        unsuccessful_move, step_overflow = self._move(action) # update the position 
+
+        unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position 
         
         # !!! integrate overflow reward calculation
-        reward -= step_overflow # !!! spikes to ridiculous amounts, but most of the time reward is 0 because path is created correctly (check if it's 100% true maybe?) (might need to normalize reference overflow matrix)
-        print(reward)
+        path_length = path_length if path_length > 0 else 1
+        reward -= normalized_step_overflow/path_length # !!! spikes to ridiculous amounts, but most of the time reward is 0 because path is created correctly (check if it's 100% true maybe?) (might need to normalize reference overflow matrix)
         reward, terminated, truncated = self.game_over_check(unsuccessful_move)
 
         # if both elements picked by action are the same to prevent just picking the terminals
@@ -162,12 +168,9 @@ class GridWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
-        # print("================================================")
-        # print(info)
-        # print(TEMP_GENERAL_OVERFLOW)
         
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
-            # print(reward)
+
             if self.render_mode == "human":
                 self._render_frame()
             if self.render_mode == "rgb_array":
@@ -185,14 +188,12 @@ class GridWorldEnv(gym.Env):
             limit_row = self.origin_shape[0] - self.insertion_coords[0]
             limit_column = self.origin_shape[1] - self.insertion_coords[1]
             
-            # print("==========================")
-            # print(self.insertion_coords[0], upto_row)
-            # print(self.insertion_coords[1], upto_column)
-            
             TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
 
-            # self.Overflow.display_matrices()
+        global TARGETS_TOTAL
+        reward = reward / TARGETS_TOTAL
         
+        # print(reward)
         return observation, reward, terminated, truncated, info
 
     
@@ -200,13 +201,12 @@ class GridWorldEnv(gym.Env):
 
         first_terminal = self._target_locations[action[0]]
         second_terminal = self._target_locations[action[1]]     
-        # grid_path = self.create_manhattan_path(first_terminal, second_terminal) # (swap for method in the overflow matrix later)
-        if first_terminal[0] == -1 or first_terminal[1] == -1 or second_terminal[0] == -1 or second_terminal[1] == -1: # no moves between coords = -1 allowed
-            return True, 0
 
-        step_overflow, path_matrix = self.Overflow.get_manhattan_path(first_terminal, second_terminal)
-        
-        return False, step_overflow
+        if first_terminal[0] == -1 or first_terminal[1] == -1 or second_terminal[0] == -1 or second_terminal[1] == -1: # no moves between coords = -1 allowed
+            return True, 1, 1, 1 # overall with give a negative reward later, i.e. -= 1/1
+        else:
+            step_overflow, normalized_step_overflow, path_length, path_matrix = self.Overflow.get_manhattan_path(first_terminal, second_terminal)
+            return False, step_overflow, normalized_step_overflow, path_length
         
     def game_over_check(self, unsuccessful_move):
         reward = 0
@@ -266,24 +266,6 @@ class GridWorldEnv(gym.Env):
             result.append(row)
             
         return np.asanyarray(result, dtype=int)
-    
-    # def create_manhattan_path(self, start, end):
-    #     # Create an empty grid initialized with zeros
-    #     grid = [[0 for _ in range(self.size)] for _ in range(self.size)]
-        
-    #     # Extract coordinates for clarity
-    #     y1, x1 = start
-    #     y2, x2 = end
-        
-    #     # Mark the Manhattan path with 1s
-    #     # Move horizontally to the correct column
-    #     for x in range(min(x1, x2), max(x1, x2) + 1):
-    #         grid[y1][x] = PATH_CELL
-    #     # Move vertically to the correct row
-    #     for y in range(min(y1, y2), max(y1, y2) + 1):
-    #         grid[y][x2] = PATH_CELL
-        
-    #     return grid
 
 
     """observation and info methods"""
@@ -295,6 +277,8 @@ class GridWorldEnv(gym.Env):
         padding = ((3, 3), (3, 3))  # Padding of 2 rows and 2 columns on each side
         
         output_array = self.resize(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape, padding)
+        output_overflow = self.resize(self.Overflow.overflow_reference_matrix, output_shape, padding)
+
         # return output_array
         return {
             # "agent": self._agent_location,
@@ -304,7 +288,7 @@ class GridWorldEnv(gym.Env):
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
             "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
-            "reference_overflow_matrix": self.Overflow.local_overflow_matrix,
+            "reference_overflow_matrix": output_overflow
             }
 
     def resize(self, array, output_shape, padding):
@@ -329,7 +313,7 @@ class GridWorldEnv(gym.Env):
         return {
             # "agent": self._agent_location,
             "target_matrix": self.Overflow.local_overflow_matrix,
-             "reference_overflow_matrix": self.Overflow.local_overflow_matrix
+             "reference_overflow_matrix": self.Overflow.overflow_reference_matrix
             }
     
     

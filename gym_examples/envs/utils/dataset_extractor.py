@@ -25,7 +25,7 @@ def get_coordinates(matrix):
 
 def get_coords_dataset(start):
     # Open the HDF5 file
-    with h5py.File('D:/PROJECTS/Python_projects/gym-examples-main/gym_examples/envs/utils/dataset.h5', 'r') as f:
+    with h5py.File('./dataset.h5', 'r') as f:
         
         group_keys = list(f.keys())
         
@@ -61,7 +61,7 @@ def get_coords_dataset(start):
 
 
 # import nexusformat.nexus as nx
-# f = nx.nxload('./utils/dataset.h5')
+# f = nx.nxload('./dataset.h5')
 # print(f.tree)
 
 # get_coords_dataset(0)

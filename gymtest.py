@@ -4,6 +4,7 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 
+
 from stable_baselines3.common.vec_env import DummyVecEnv, SubprocVecEnv
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.evaluation import evaluate_policy
@@ -34,8 +35,8 @@ if __name__ == "__main__":
     
     PROCESSES_TO_TEST = 1
     NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 10
-    EVAL_EPS = 4
+    TRAIN_STEPS = 100000000
+    EVAL_EPS = 40
     ALGO = PPO
 
     # We will create one environment to evaluate the agent on
@@ -64,8 +65,8 @@ if __name__ == "__main__":
     for experiment in range(NUM_EXPERIMENTS):
         # it is recommended to run several experiments due to variability in results
         train_env.reset()
-        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu") # , tensorboard_log="./gp_tensorboard/"
-        model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, verbose=1))
+        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu", tensorboard_log="./gp_tensorboard/")
+        model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, best_model_save_path='./', eval_freq=500, verbose=1))
         print("\n=============\nEVAL STARTED\n=============\n")
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
         rewards.append(mean_reward)
@@ -74,8 +75,8 @@ if __name__ == "__main__":
     # otherwise, you may have memory issues when running a lot of experiments
     train_env.close()
     
-    # model.save("ppo_model")
-    # print("\nMODEL SAVED\n")
+    model.save("ppo_model")
+    print("\nMODEL SAVED\n")
     
     reward_averages.append(np.mean(rewards))
     reward_std.append(np.std(rewards))
