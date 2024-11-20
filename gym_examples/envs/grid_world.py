@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 10000000000
-RESET_EACH = 1000
+RENDER_EACH = 10000000
+RESET_EACH = 10000
 
 TARGETS_TOTAL = 2
 
@@ -46,15 +46,15 @@ class GridWorldEnv(gym.Env):
                 # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
-                "target_list": spaces.Box(0, self.size - 1, shape=(5,2), dtype=np.int64),
+                "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(6),
+                "targets_left": spaces.Discrete(5),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
                 "reference_overflow_matrix": spaces.Box(0, np.inf, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
             }
         )
-        
+
         self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
         
         render_mode = "human"
@@ -95,15 +95,15 @@ class GridWorldEnv(gym.Env):
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
         
-        match TARGETS_TOTAL:
-            case 3:
-                RESET_EACH = 4000
-            case 4:
-                RESET_EACH = 8000
-            case 5:
-                RESET_EACH = 16000
-            case _:
-                RESET_EACH = 1000
+        # match TARGETS_TOTAL:
+        #     case 3:
+        #         RESET_EACH = 4000
+        #     case 4:
+        #         RESET_EACH = 8000
+        #     case 5:
+        #         RESET_EACH = 16000
+        #     case _:
+        #         RESET_EACH = 1000
             
         self.env_steps += 1
         
@@ -118,13 +118,12 @@ class GridWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
-        
+
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
             if self.render_mode == "human":
                 self._render_frame()
             if self.render_mode == "rgb_array":
                 self._render_frame_as_rgb_array()
-
 
         return observation, info
            
@@ -143,22 +142,36 @@ class GridWorldEnv(gym.Env):
         reward = 0
         terminated = False     
         truncated = False
-
-        unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position 
         
-        # !!! integrate overflow reward calculation
-        path_length = path_length if path_length > 0 else 1
-        reward -= normalized_step_overflow/path_length # !!! spikes to ridiculous amounts, but most of the time reward is 0 because path is created correctly (check if it's 100% true maybe?) (might need to normalize reference overflow matrix)
-        reward, terminated, truncated = self.game_over_check(unsuccessful_move)
-
-        # if both elements picked by action are the same to prevent just picking the terminals
-        same_elem = np.equal(action[0], action[1])
-        if same_elem: 
+        unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
+  
+            
+        if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
+            terminated = True
         
+        if self.iterations > 5: # quit if too many steps
+            reward -= 1
+            truncated = True
+        
+        if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
+            terminated = True
+            self.successful_path = True
+            reward += 1 
+            
+        path_length = path_length if path_length > 0 else 1
+        reward -= normalized_step_overflow/path_length 
+        
+        # if both elements picked by action are the same to prevent just picking the terminals
+        if np.equal(action[0], action[1]): 
+            reward -= 1
+
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 1
+            reward -= 0.8
+
+        # if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions):
+        #     reward += 0.5
             
         # if connects same terminals in a different order
         if self.is_identical_to_previous(action, self.previous_actions):
@@ -190,8 +203,9 @@ class GridWorldEnv(gym.Env):
             
             TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
 
+
         global TARGETS_TOTAL
-        reward = reward / TARGETS_TOTAL
+        reward = reward / TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
         # print(reward)
         return observation, reward, terminated, truncated, info
@@ -207,37 +221,7 @@ class GridWorldEnv(gym.Env):
         else:
             step_overflow, normalized_step_overflow, path_length, path_matrix = self.Overflow.get_manhattan_path(first_terminal, second_terminal)
             return False, step_overflow, normalized_step_overflow, path_length
-        
-    def game_over_check(self, unsuccessful_move):
-        reward = 0
-        terminated = False
-        truncated = False
-        
-        footprint = np.count_nonzero(self.Overflow.local_overflow_matrix == PATH_CELL) # how many path cells are there
-        
-        # comparing footprint after current step with the previous one (might want to add && not_moved == False to consider intersections next to each other)
-        if footprint > self.total_footprint: 
-            # roughly 1/60th of the max footprint in a single step so max negative per step is 0.99 - can be calculated as 1/self.size if size is variable
-            reward -= (1 / self.size ) * (footprint - self.total_footprint)
-            self.total_footprint = copy.deepcopy(footprint)
-        else:
-            reward -= 1 # prevents picking actions that cause no difference to the grid
-            
-        if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
-            terminated = True
-            self.successful_path = True
-            # reward = 1 
-            
-        if unsuccessful_move: # if picked action that has negative pair of coords
-            reward -= 1
-            terminated = True
-            
-        if self.iterations > 5: # quit if too many steps
-            reward -= 1
-            truncated = True
 
-        
-        return reward, terminated, truncated # score is less with each step
 
 
     def is_connected_to_previous(self, pair, previous_pairs):
@@ -279,7 +263,6 @@ class GridWorldEnv(gym.Env):
         output_array = self.resize(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape, padding)
         output_overflow = self.resize(self.Overflow.overflow_reference_matrix, output_shape, padding)
 
-        # return output_array
         return {
             # "agent": self._agent_location,
             # "target_locations": self.get_matrix_with_targets(),
@@ -312,8 +295,8 @@ class GridWorldEnv(gym.Env):
     def _get_info(self):
         return {
             # "agent": self._agent_location,
-            "target_matrix": self.Overflow.local_overflow_matrix,
-             "reference_overflow_matrix": self.Overflow.overflow_reference_matrix
+            # "target_matrix": self.Overflow.local_overflow_matrix,
+            #  "reference_overflow_matrix": self.Overflow.overflow_reference_matrix
             }
     
     
