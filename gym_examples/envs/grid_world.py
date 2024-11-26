@@ -16,7 +16,7 @@ TERMINAL_CELL = 2
 PATH_CELL = 1 
 
 RENDER_EACH = 10000000
-RESET_EACH = 10000
+RESET_EACH = 256
 
 TARGETS_TOTAL = 2
 
@@ -46,12 +46,12 @@ class GridWorldEnv(gym.Env):
                 # "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
+                "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
+                "targets_left": spaces.Discrete(6),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
-                "targets_left": spaces.Discrete(5),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
-                "reference_overflow_matrix": spaces.Box(0, np.inf, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
             }
         )
 
@@ -145,6 +145,11 @@ class GridWorldEnv(gym.Env):
         
         unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
   
+        if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
+            terminated = True
+            self.successful_path = True
+            reward += 1 
+            reward += 1 - 0.1 * self.iterations
             
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
@@ -153,29 +158,25 @@ class GridWorldEnv(gym.Env):
         if self.iterations > 5: # quit if too many steps
             reward -= 1
             truncated = True
-        
-        if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
-            terminated = True
-            self.successful_path = True
-            reward += 1 
-            
+                
         path_length = path_length if path_length > 0 else 1
-        reward -= normalized_step_overflow/path_length 
+        reward -= normalized_step_overflow / path_length 
         
         # if both elements picked by action are the same to prevent just picking the terminals
         if np.equal(action[0], action[1]): 
             reward -= 1
 
+        # if connects same terminals as before
+        if self.is_identical_to_previous(action, self.previous_actions):
+            reward -= 1
+            
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
             reward -= 0.8
 
-        # if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions):
-        #     reward += 0.5
+        if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions):
+            reward += 0.5
             
-        # if connects same terminals in a different order
-        if self.is_identical_to_previous(action, self.previous_actions):
-            reward -= 1
 
         self.previous_actions.append(action)
         
@@ -205,7 +206,7 @@ class GridWorldEnv(gym.Env):
 
 
         global TARGETS_TOTAL
-        reward = reward / TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
+        reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
         # print(reward)
         return observation, reward, terminated, truncated, info
@@ -262,16 +263,23 @@ class GridWorldEnv(gym.Env):
         
         output_array = self.resize(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape, padding)
         output_overflow = self.resize(self.Overflow.overflow_reference_matrix, output_shape, padding)
+        
+        output_overflow_min = output_overflow.min()
+        output_overflow_max = output_overflow.max()
+        if output_overflow_min == output_overflow_max:
+            normalized_output_overflow = output_overflow * 0
+        else:
+            normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
 
         return {
             # "agent": self._agent_location,
             # "target_locations": self.get_matrix_with_targets(),
             "target_matrix": output_array,
+            "reference_overflow_matrix": normalized_output_overflow,
             "target_list": np.array(self._target_locations, dtype=np.int64),
+            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
-            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
-            "reference_overflow_matrix": output_overflow
             }
 
     def resize(self, array, output_shape, padding):

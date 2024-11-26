@@ -33,10 +33,10 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 1
+    PROCESSES_TO_TEST = 2
     NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
     TRAIN_STEPS = 100000000
-    EVAL_EPS = 40
+    EVAL_EPS = 256
     ALGO = PPO
 
     # We will create one environment to evaluate the agent on
@@ -48,6 +48,7 @@ if __name__ == "__main__":
     total_procs = PROCESSES_TO_TEST
 
     print(f"Running for n_procs = {total_procs}")
+    
     if total_procs == 1:
         # if there is only one process, there is no need to use multiprocessing
         train_env = DummyVecEnv([lambda: gym.make('gym_examples/GridWorld-v0')])
@@ -65,8 +66,19 @@ if __name__ == "__main__":
     for experiment in range(NUM_EXPERIMENTS):
         # it is recommended to run several experiments due to variability in results
         train_env.reset()
-        model = ALGO("MultiInputPolicy", train_env, verbose=1, device="cpu", tensorboard_log="./gp_tensorboard/")
+        model = ALGO(
+                        "MultiInputPolicy", 
+                        train_env, 
+                        verbose=1, 
+                        learning_rate=3e-5, 
+                        batch_size=128,
+                        gamma=0.99, 
+                        ent_coef=0.01, 
+                        clip_range=0.05,
+                        tensorboard_log="./gp_tensorboard/",
+                    )
         model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, best_model_save_path='./', eval_freq=500, verbose=1))
+        
         print("\n=============\nEVAL STARTED\n=============\n")
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
         rewards.append(mean_reward)
