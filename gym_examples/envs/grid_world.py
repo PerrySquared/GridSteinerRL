@@ -97,13 +97,13 @@ class GridWorldEnv(gym.Env):
         
         # match TARGETS_TOTAL:
         #     case 3:
-        #         RESET_EACH = 4000
+        #         RESET_EACH = 256
         #     case 4:
-        #         RESET_EACH = 8000
+        #         RESET_EACH = 1024   
         #     case 5:
-        #         RESET_EACH = 16000
+        #         RESET_EACH = 4096
         #     case _:
-        #         RESET_EACH = 1000
+        #         RESET_EACH = 256
             
         self.env_steps += 1
         
@@ -137,11 +137,13 @@ class GridWorldEnv(gym.Env):
                         pygame.quit()
                         quit()
 
-        self.iterations += 1
+        global TARGETS_TOTAL
         
         reward = 0
         terminated = False     
         truncated = False
+        
+        self.iterations += 1
         
         unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
   
@@ -149,7 +151,7 @@ class GridWorldEnv(gym.Env):
             terminated = True
             self.successful_path = True
             reward += 1 
-            reward += 1 - 0.1 * self.iterations
+            reward += TARGETS_TOTAL/5
             
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
@@ -181,7 +183,7 @@ class GridWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
-        
+
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
 
             if self.render_mode == "human":
@@ -204,10 +206,9 @@ class GridWorldEnv(gym.Env):
             TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
 
 
-        global TARGETS_TOTAL
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        print(reward)
+        # print(reward)
         return observation, reward, terminated, truncated, info
 
     

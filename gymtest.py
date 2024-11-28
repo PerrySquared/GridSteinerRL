@@ -34,8 +34,8 @@ def make_env(env_id, id):
 if __name__ == "__main__":
     
     PROCESSES_TO_TEST = 2
-    NUM_EXPERIMENTS = 3  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 4000000
+    NUM_EXPERIMENTS = 2  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
+    TRAIN_STEPS = 3000000
     EVAL_EPS = 256
     ALGO = PPO
 
@@ -71,14 +71,14 @@ if __name__ == "__main__":
                         train_env,
                         verbose=1, 
                         device="cuda",
-                        learning_rate=3e-5, 
+                        learning_rate=1e-4, 
                         batch_size=256,
                         gamma=0.99, 
-                        ent_coef=0.01, 
-                        clip_range=0.05,
+                        ent_coef=0.02, 
+                        clip_range=0.2,
                         tensorboard_log="./gp_tensorboard/",
                     )
-        model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, best_model_save_path='./', eval_freq=500, verbose=1))
+        model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, eval_freq=2000, verbose=1))
         
         print("\n=============\nEVAL STARTED\n=============\n")
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
