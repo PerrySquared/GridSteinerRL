@@ -15,7 +15,7 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1000000000000
+RENDER_EACH = 100000000000
 RESET_EACH = 256
 
 TARGETS_TOTAL = 2
@@ -167,16 +167,17 @@ class GridWorldEnv(gym.Env):
         # if both elements picked by action are the same to prevent just picking the terminals
         if np.equal(action[0], action[1]): 
             reward -= 1
+            
         # if connects same terminals as before
         if self.is_identical_to_previous(action, self.previous_actions):
             reward -= 1
             
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 0.6
+            reward -= 0.8
 
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions):
-            reward += 0.4
+            reward += 0.6
             
 
         self.previous_actions.append(action)

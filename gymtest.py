@@ -33,10 +33,10 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 2
-    NUM_EXPERIMENTS = 2  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 3000000
-    EVAL_EPS = 256
+    PROCESSES_TO_TEST = 6
+    NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
+    TRAIN_STEPS = 5000000
+    EVAL_EPS = 60
     ALGO = PPO
 
     # We will create one environment to evaluate the agent on
@@ -72,12 +72,14 @@ if __name__ == "__main__":
                         verbose=1, 
                         device="cuda",
                         learning_rate=1e-4, 
-                        batch_size=256,
+                        batch_size=64,
                         gamma=0.99, 
                         ent_coef=0.02, 
-                        clip_range=0.2,
+                        clip_range=0.15,
                         tensorboard_log="./gp_tensorboard/",
                     )
+        print(f"Using device: {model.device}")
+
         model.learn(total_timesteps=TRAIN_STEPS, callback=EvalCallback(train_env, n_eval_episodes=EVAL_EPS, eval_freq=2000, verbose=1))
         
         print("\n=============\nEVAL STARTED\n=============\n")
