@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 100000000000
-RESET_EACH = 256
+RENDER_EACH = 1
+RESET_EACH = 1
 
 TARGETS_TOTAL = 2
 
@@ -162,10 +162,10 @@ class GridWorldEnv(gym.Env):
             truncated = True
                 
         path_length = path_length if path_length > 0 else 1
-        reward -= normalized_step_overflow / path_length 
+        reward -= normalized_step_overflow / path_length
         
         # if both elements picked by action are the same to prevent just picking the terminals
-        if np.equal(action[0], action[1]): 
+        if action[0] == action[1]: 
             reward -= 1
             
         # if connects same terminals as before
@@ -174,10 +174,10 @@ class GridWorldEnv(gym.Env):
             
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 0.8
+            reward -= 0.9
 
-        if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions):
-            reward += 0.6
+        if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
+            reward += 0.7
             
 
         self.previous_actions.append(action)
@@ -209,12 +209,11 @@ class GridWorldEnv(gym.Env):
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        # print(reward)
+        print(reward)
         return observation, reward, terminated, truncated, info
 
     
     def _move(self, action):
-
         first_terminal = self._target_locations[action[0]]
         second_terminal = self._target_locations[action[1]]     
 
