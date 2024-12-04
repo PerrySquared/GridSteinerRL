@@ -39,6 +39,7 @@ class GridWorldEnv(gym.Env):
         self._agent_location = []
         self.found_instance_index = 0
         self.env_steps = 0
+        self.env_swaps = 0
         self.f = h5py.File('./gym_examples/envs/utils/dataset.h5', 'r')
         
         # self.observation_space = spaces.Box(0, 1, shape=(96, 96), dtype=np.float64)
@@ -91,10 +92,12 @@ class GridWorldEnv(gym.Env):
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((5,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
-            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, 0, self.f)        
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, self.get_target_amount_sequence(self.env_swaps), self.f)        
             
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
+            
+            self.env_swaps += 1
         
         # match TARGETS_TOTAL:
         #     case 3:
@@ -128,11 +131,20 @@ class GridWorldEnv(gym.Env):
 
         return observation, info
     
-    def get_target_amount_sequence(self, env_steps):
-         match env_steps//13000:
-            case 0: return 4
-            case 1: return 5
-            case 2: return 3
+    def get_target_amount_sequence(self, env_swaps):
+
+        if env_swaps%200 == 0:
+            print("env_swaps ", env_swaps)
+            print("env_swaps_div200 ", env_swaps//200)
+            print("env_swaps_div10000 ", env_swaps//2000)
+        
+        match env_swaps//2000:
+            case 0: 
+                return 3
+            case 1: 
+                return 4
+            case 2: 
+                return 5
 
     def step(self, action):
         # check if exited
@@ -215,7 +227,7 @@ class GridWorldEnv(gym.Env):
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        print(reward)
+        # print(reward)
         return observation, reward, terminated, truncated, info
 
     
@@ -276,7 +288,18 @@ class GridWorldEnv(gym.Env):
             normalized_output_overflow = output_overflow * 0
         else:
             normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
-
+        
+        # print({
+        #     # "agent": self._agent_location,
+        #     # "target_locations": self.get_matrix_with_targets(),
+        #     "target_matrix": output_array,
+        #     "reference_overflow_matrix": normalized_output_overflow,
+        #     "target_list": np.array(self._target_locations, dtype=np.int64),
+        #     "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+        #     # "targets_relative_line": self.check_for_target_line(),
+        #     # "targets_relative_general": self.check_for_target_general(),
+        #     })
+        
         return {
             # "agent": self._agent_location,
             # "target_locations": self.get_matrix_with_targets(),

@@ -33,9 +33,9 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 6
+    PROCESSES_TO_TEST = 4
     NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 5000000
+    TRAIN_STEPS = 6000000
     EVAL_EPS = 60
     ALGO = PPO
 
@@ -71,7 +71,7 @@ if __name__ == "__main__":
                         train_env,
                         verbose=1, 
                         device="cuda",
-                        learning_rate=1e-4, 
+                        learning_rate=6e-5, 
                         batch_size=64,
                         gamma=0.99, 
                         ent_coef=0.02, 
