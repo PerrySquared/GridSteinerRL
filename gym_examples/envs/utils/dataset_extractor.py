@@ -23,9 +23,9 @@ def get_coordinates(matrix):
     return coordinates
 
 
-def get_coords_dataset(start):
+def get_coords_dataset(start, target_amount, f):
     # Open the HDF5 file
-    with h5py.File('./gym_examples/envs/utils/dataset.h5', 'r') as f:
+        
         
         group_keys = list(f.keys())
         
@@ -46,7 +46,8 @@ def get_coords_dataset(start):
             origin_shape = group.attrs.get("origin_shape", (0, 0))
 
             # Check if the matrix has MATRIX_SIZE rows or less and MATRIX_SIZE columns or less
-            if matrix.shape[0] <= MATRIX_SIZE and matrix.shape[1] <= MATRIX_SIZE and np.count_nonzero(matrix == 1) <= 5 and np.count_nonzero(matrix == 1) >= 3:
+            target_count_on_matrix = np.count_nonzero(matrix == 1)
+            if matrix.shape[0] <= MATRIX_SIZE and matrix.shape[1] <= MATRIX_SIZE and target_count_on_matrix >= 3 and target_count_on_matrix <=5:
                 # Pad the matrix if necessary
                 pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])), (0, max(0, MATRIX_SIZE - matrix.shape[1])))
                 padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)

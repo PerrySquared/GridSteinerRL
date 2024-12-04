@@ -15,14 +15,14 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1
-RESET_EACH = 1
+RENDER_EACH = 10000000000
+RESET_EACH = 256
 
-TARGETS_TOTAL = 2
+TARGETS_TOTAL = 3
 
 LOCAL_AREA_SIZE = 32
 
-TEMP_GENERAL_OVERFLOW = np.zeros((135,133), dtype=np.float64)
+TEMP_GENERAL_OVERFLOW = np.zeros((1000,1000), dtype=np.float64)
 
 random.seed(11)
 
@@ -39,6 +39,7 @@ class GridWorldEnv(gym.Env):
         self._agent_location = []
         self.found_instance_index = 0
         self.env_steps = 0
+        self.f = h5py.File('./gym_examples/envs/utils/dataset.h5', 'r')
         
         # self.observation_space = spaces.Box(0, 1, shape=(96, 96), dtype=np.float64)
         self.observation_space = spaces.Dict(
@@ -90,7 +91,7 @@ class GridWorldEnv(gym.Env):
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((5,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
-            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1)        
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, 0, self.f)        
             
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
@@ -126,7 +127,12 @@ class GridWorldEnv(gym.Env):
                 self._render_frame_as_rgb_array()
 
         return observation, info
-           
+    
+    def get_target_amount_sequence(self, env_steps):
+         match env_steps//13000:
+            case 0: return 4
+            case 1: return 5
+            case 2: return 3
 
     def step(self, action):
         # check if exited
