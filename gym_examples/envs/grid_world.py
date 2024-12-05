@@ -98,6 +98,8 @@ class GridWorldEnv(gym.Env):
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
             
             self.env_swaps += 1
+            
+        # print("reset")
         
         # match TARGETS_TOTAL:
         #     case 3:
@@ -136,15 +138,17 @@ class GridWorldEnv(gym.Env):
         if env_swaps%200 == 0:
             print("env_swaps ", env_swaps)
             print("env_swaps_div200 ", env_swaps//200)
-            print("env_swaps_div10000 ", env_swaps//2000)
+            print("env_swaps_div1000 ", env_swaps//1000)
         
-        match env_swaps//2000:
+        match env_swaps//1000:
             case 0: 
                 return 3
             case 1: 
                 return 4
             case 2: 
                 return 5
+            case _: 
+                return 6
 
     def step(self, action):
         # check if exited
@@ -173,29 +177,30 @@ class GridWorldEnv(gym.Env):
             
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
-            terminated = True
+            truncated = True
         
         if self.iterations > 5: # quit if too many steps
             reward -= 1
             truncated = True
-                
+        
+        # avg overflow per cell on path      
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
+        
+        # if connects same terminals as before
+        if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
+            reward -= 1 # try * self.iterations
         
         # if both elements picked by action are the same to prevent just picking the terminals
         if action[0] == action[1]: 
             reward -= 1
             
-        # if connects same terminals as before
-        if self.is_identical_to_previous(action, self.previous_actions):
-            reward -= 1
-            
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 0.9
+            reward -= 1
 
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
-            reward += 0.7
+            reward += 0.5
             
 
         self.previous_actions.append(action)
@@ -227,7 +232,7 @@ class GridWorldEnv(gym.Env):
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        # print(reward)
+        # print(reward, action)
         return observation, reward, terminated, truncated, info
 
     

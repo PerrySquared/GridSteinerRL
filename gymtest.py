@@ -71,7 +71,7 @@ if __name__ == "__main__":
                         train_env,
                         verbose=1, 
                         device="cuda",
-                        learning_rate=6e-5, 
+                        learning_rate=1e-4, 
                         batch_size=64,
                         gamma=0.99, 
                         ent_coef=0.02, 
