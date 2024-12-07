@@ -16,7 +16,7 @@ TERMINAL_CELL = 2
 PATH_CELL = 1 
 
 RENDER_EACH = 10000000000
-RESET_EACH = 256
+RESET_EACH = 512
 
 TARGETS_TOTAL = 3
 
@@ -42,6 +42,8 @@ class GridWorldEnv(gym.Env):
         self.env_swaps = 0
         self.f = h5py.File('./gym_examples/envs/utils/dataset.h5', 'r')
         
+        render_mode = None
+        
         # self.observation_space = spaces.Box(0, 1, shape=(96, 96), dtype=np.float64)
         self.observation_space = spaces.Dict(
             {
@@ -59,7 +61,6 @@ class GridWorldEnv(gym.Env):
 
         self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
         
-        render_mode = "human"
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -92,24 +93,13 @@ class GridWorldEnv(gym.Env):
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((5,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
-            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, self.get_target_amount_sequence(self.env_swaps), self.f)        
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, 3, self.f)        
             
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
             
             self.env_swaps += 1
             
-        # print("reset")
-        
-        # match TARGETS_TOTAL:
-        #     case 3:
-        #         RESET_EACH = 256
-        #     case 4:
-        #         RESET_EACH = 1024   
-        #     case 5:
-        #         RESET_EACH = 4096
-        #     case _:
-        #         RESET_EACH = 256
             
         self.env_steps += 1
         
@@ -135,20 +125,17 @@ class GridWorldEnv(gym.Env):
     
     def get_target_amount_sequence(self, env_swaps):
 
-        if env_swaps%200 == 0:
+        if env_swaps%10 == 0:
             print("env_swaps ", env_swaps)
-            print("env_swaps_div200 ", env_swaps//200)
-            print("env_swaps_div1000 ", env_swaps//1000)
         
-        match env_swaps//1000:
-            case 0: 
-                return 3
-            case 1: 
-                return 4
-            case 2: 
-                return 5
-            case _: 
-                return 6
+        if env_swaps <= 800:
+            return 3
+        elif env_swaps > 800 and env_swaps <= 1600:
+            return 4
+        elif env_swaps > 1600 and env_swaps <= 3500:
+            return 5
+        else:
+            return 5
 
     def step(self, action):
         # check if exited
