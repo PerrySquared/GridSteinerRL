@@ -6,7 +6,7 @@ import sys
 np.set_printoptions(threshold=sys.maxsize)
 random.seed(11)
 
-MATRIX_SIZE = 32
+MATRIX_SIZE = 64
 
 def display_heatmap(matrix):
     # print(type(matrix))

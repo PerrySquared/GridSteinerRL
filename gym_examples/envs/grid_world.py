@@ -20,7 +20,7 @@ RESET_EACH = 512
 
 TARGETS_TOTAL = 3
 
-LOCAL_AREA_SIZE = 32
+LOCAL_AREA_SIZE = 64
 
 TEMP_GENERAL_OVERFLOW = np.zeros((1000,1000), dtype=np.float64)
 
@@ -52,7 +52,7 @@ class GridWorldEnv(gym.Env):
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
-                "targets_left": spaces.Discrete(6),
+                # "targets_left": spaces.Discrete(6),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
@@ -298,7 +298,7 @@ class GridWorldEnv(gym.Env):
             "target_matrix": output_array,
             "reference_overflow_matrix": normalized_output_overflow,
             "target_list": np.array(self._target_locations, dtype=np.int64),
-            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+            # "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
             }
