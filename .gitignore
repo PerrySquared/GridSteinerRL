@@ -1,0 +1,15 @@
+# Ignore Python cache files
+__pycache__/
+gym_examples/__pycache__/
+gym_examples/envs/__pycache__/
+
+# Ignore model directories and files
+best_models/
+ppo_model.zip
+
+# Ignore TensorBoard logs
+gp_tensorboard/
+
+# Ignore utility scripts in the specified directory
+gym_examples/envs/utils/__pycache__/
+gym_examples/envs/utils/dataset.h5
