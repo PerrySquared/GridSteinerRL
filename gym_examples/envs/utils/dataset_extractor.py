@@ -26,7 +26,6 @@ def get_coordinates(matrix):
 def get_coords_dataset(start, target_amount, f):
     # Open the HDF5 file
         
-        
         group_keys = list(f.keys())
         
         for i in range(start, len(group_keys)):

@@ -13,7 +13,6 @@ import os
 np.set_printoptions(threshold=sys.maxsize)
 
 
-
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
