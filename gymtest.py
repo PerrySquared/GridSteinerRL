@@ -18,10 +18,6 @@ import os
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
 def make_env(env_id, id):
     def _init():
 
@@ -36,15 +32,9 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-<<<<<<< HEAD
     PROCESSES_TO_TEST = 4
     NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
     TRAIN_STEPS = 4000000
-=======
-    PROCESSES_TO_TEST = 6
-    NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 2800000
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
     EVAL_EPS = 100
     ALGO = PPO
 
@@ -80,27 +70,16 @@ if __name__ == "__main__":
                         train_env,
                         verbose=1, 
                         device="cuda",
-<<<<<<< HEAD
                         learning_rate=1e-4, 
                         batch_size=64,
                         gamma=0.95, 
                         ent_coef=0.05, 
-=======
-                        learning_rate=5e-5, 
-                        batch_size=64,
-                        gamma=0.99, 
-                        ent_coef=0.02, 
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
                         clip_range=0.15,
                         tensorboard_log="./gp_tensorboard/",
                     )
         print(f"Using device: {model.device}")
 
-<<<<<<< HEAD
         model.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, callback=EvalCallback(train_env, best_model_save_path="./best_models", n_eval_episodes=EVAL_EPS, eval_freq=2048, verbose=1))
-=======
-        model.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, callback=EvalCallback(train_env, best_model_save_path="./best_models", n_eval_episodes=EVAL_EPS, eval_freq=4096, verbose=1))
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
         
         print("\n=============\nEVAL STARTED\n=============\n")
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
@@ -116,11 +95,8 @@ if __name__ == "__main__":
     reward_averages.append(np.mean(rewards))
     reward_std.append(np.std(rewards))
 
-<<<<<<< HEAD
 
 
-=======
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
     def plot_training_results(training_steps_per_second, reward_averages, reward_std):
         """
         Utility function for plotting the results of training

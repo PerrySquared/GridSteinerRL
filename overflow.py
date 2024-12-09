@@ -15,10 +15,6 @@ constant value in places where created path is located
 
 OVERFLOW_VALUE = 1
 
-<<<<<<< HEAD
-
-=======
->>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
 class OverflowWithOverlap():
     def __init__(self, general_overflow_matrix, rows, columns):
         """
