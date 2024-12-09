@@ -12,16 +12,25 @@ import sys
 import os
 np.set_printoptions(threshold=sys.maxsize)
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
 RENDER_EACH = 10000000000
 RESET_EACH = 512
 
+<<<<<<< HEAD
 TARGETS_TOTAL = 4
 
 LOCAL_AREA_SIZE = 32
+=======
+TARGETS_TOTAL = 3
+
+LOCAL_AREA_SIZE = 64
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
 
 TEMP_GENERAL_OVERFLOW = np.zeros((1000,1000), dtype=np.float64)
 
@@ -52,7 +61,11 @@ class GridWorldEnv(gym.Env):
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
+<<<<<<< HEAD
                 "target_list": spaces.Box(0, self.size, shape=(4,2), dtype=np.int64),
+=======
+                "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
                 # "targets_left": spaces.Discrete(6),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
@@ -60,9 +73,14 @@ class GridWorldEnv(gym.Env):
             }
         )
 
+<<<<<<< HEAD
         self.action_space = spaces.MultiDiscrete(np.array([4, 4]))
         
         # render_mode = "human"
+=======
+        self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
+        
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -92,12 +110,19 @@ class GridWorldEnv(gym.Env):
         global RESET_EACH
         global TARGETS_TOTAL
         
+<<<<<<< HEAD
         TASK_TARGETS = 4
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((4,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, TASK_TARGETS, self.f)        
+=======
+        if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
+            self._target_locations_copy = np.full((5,2), -1)
+            # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, 3, self.f)        
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
             
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
@@ -166,6 +191,7 @@ class GridWorldEnv(gym.Env):
             reward += 1 
             reward += TARGETS_TOTAL/5
             
+<<<<<<< HEAD
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
         
@@ -182,17 +208,42 @@ class GridWorldEnv(gym.Env):
         # if connects same terminals as before
         if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
             reward -= 2 # try * self.iterations
+=======
+        if unsuccessful_move: # if picked action that has negative pair of coords
+            reward -= 1
+            truncated = True
+        
+        if self.iterations > 5: # quit if too many steps
+            reward -= 1
+            truncated = True
+        
+        # avg overflow per cell on path      
+        path_length = path_length if path_length > 0 else 1
+        reward -= normalized_step_overflow / path_length
+        
+        # if connects same terminals as before
+        if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
+            reward -= 1 # try * self.iterations
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
         
         # if both elements picked by action are the same to prevent just picking the terminals
         if action[0] == action[1]: 
             reward -= 1
             
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
+<<<<<<< HEAD
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]: # if not first iteration and current action contains only one element from the previous
             reward -= 1
 
         # if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
         #     reward += 0.8
+=======
+        if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
+            reward -= 1
+
+        if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
+            reward += 0.5
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
             
 
         self.previous_actions.append(action)
@@ -227,8 +278,11 @@ class GridWorldEnv(gym.Env):
         # print(reward, action)
         return observation, reward, terminated, truncated, info
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
     
     def _move(self, action):
         first_terminal = self._target_locations[action[0]]
@@ -278,8 +332,13 @@ class GridWorldEnv(gym.Env):
         output_shape = (LOCAL_AREA_SIZE, LOCAL_AREA_SIZE)
         padding = ((3, 3), (3, 3))  # Padding of 2 rows and 2 columns on each side
         
+<<<<<<< HEAD
         output_array = self.resize(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape, 0)
         output_overflow = self.resize(self.Overflow.overflow_reference_matrix, output_shape, 0)
+=======
+        output_array = self.resize(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape, padding)
+        output_overflow = self.resize(self.Overflow.overflow_reference_matrix, output_shape, padding)
+>>>>>>> 662b995cdf15b553601f1305b7e0e988b7eec8b8
         
         output_overflow_min = output_overflow.min()
         output_overflow_max = output_overflow.max()
