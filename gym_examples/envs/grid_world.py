@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 10000000000
-RESET_EACH = 512
+RENDER_EACH = 1
+RESET_EACH = 1
 
 TARGETS_TOTAL = 4
 
@@ -52,7 +52,7 @@ class GridWorldEnv(gym.Env):
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "target_list": spaces.Box(0, self.size, shape=(4,2), dtype=np.int64),
-                # "targets_left": spaces.Discrete(6),
+                "targets_left": spaces.Discrete(5),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
@@ -61,7 +61,7 @@ class GridWorldEnv(gym.Env):
 
         self.action_space = spaces.MultiDiscrete(np.array([4, 4]))
         
-        # render_mode = "human"
+        render_mode = "human"
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -80,7 +80,6 @@ class GridWorldEnv(gym.Env):
         
     def reset(self, seed=None, options=None):
         self.iterations = 0
-        self.successful_path = False
         self.total_footprint = 0
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
@@ -150,6 +149,7 @@ class GridWorldEnv(gym.Env):
                         quit()
 
         global TARGETS_TOTAL
+        successful_path = False
         
         reward = 0
         terminated = False     
@@ -161,38 +161,38 @@ class GridWorldEnv(gym.Env):
   
         if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
-            self.successful_path = True
+            successful_path = True
             reward += 1 
             reward += TARGETS_TOTAL/5
             
+        # avg overflow per cell on path      
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
-        
+
         if unsuccessful_move: # if picked action that has negative pair of coords
-            reward -= 2
+            reward -= 1
             truncated = True
         
         if self.iterations > 5: # quit if too many steps
-            reward -= 2
+            reward -= 1
             truncated = True
         
-        # avg overflow per cell on path      
-        
-        # if connects same terminals as before
-        if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
-            reward -= 2 # try * self.iterations
-        
         # if both elements picked by action are the same to prevent just picking the terminals
-        if action[0] == action[1]: 
-            reward -= 1
-            
+        # if action[0] == action[1]: 
+        #     reward -= 1
+
+        # if connects same terminals as one of the previous actions in any order
+        # if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
+        #     reward -= 1 
+        #     print("ident_prev", reward)
+        
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
-        if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]: # if not first iteration and current action contains only one element from the previous
+        if self.iterations > 1 and (not self.is_connected_to_previous(action, self.previous_actions) or self.is_identical_to_previous(action, self.previous_actions)): 
             reward -= 1
 
         # if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
         #     reward += 0.8
-            
+
 
         self.previous_actions.append(action)
         
@@ -209,7 +209,7 @@ class GridWorldEnv(gym.Env):
         # 6. return game over and score
 
         # !!! if terminated or truncated add local overflow to general overflow (dependent on the amount of repeats for a single env, i.e. save best or latest out of RESET_EACH)
-        if self.successful_path:
+        if successful_path:
             global TEMP_GENERAL_OVERFLOW
             
             upto_row = min(self.insertion_coords[0] + LOCAL_AREA_SIZE, self.origin_shape[0])
@@ -218,8 +218,8 @@ class GridWorldEnv(gym.Env):
             limit_row = self.origin_shape[0] - self.insertion_coords[0]
             limit_column = self.origin_shape[1] - self.insertion_coords[1]
             
-            TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
-
+            # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
+            TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] 
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
@@ -244,8 +244,13 @@ class GridWorldEnv(gym.Env):
     def is_connected_to_previous(self, pair, previous_pairs):
         # Check if the pair is connected to any of the previous pairs
         for prev_pair in previous_pairs:
-            if pair[0] == prev_pair[0] or pair[1] == prev_pair[0] or pair[0] == prev_pair[1] or pair[1] == prev_pair[1]:
-                return True
+            # identical or differently ordered pairs dont count as connected to previous
+            if  pair[0] != pair[1] and prev_pair [0] != prev_pair[1] and \
+                ((pair[0] == prev_pair[0] and pair[1] != prev_pair[1]) or \
+                (pair[1] == prev_pair[0] and pair[0] != prev_pair[1]) or \
+                (pair[0] == prev_pair[1] and pair[1] != prev_pair[0]) or \
+                (pair[1] == prev_pair[1] and pair[0] != prev_pair[0])):
+                    return True
         return False
 
     def is_identical_to_previous(self, pair, previous_pairs):
@@ -304,7 +309,7 @@ class GridWorldEnv(gym.Env):
             "target_matrix": output_array,
             "reference_overflow_matrix": normalized_output_overflow,
             "target_list": np.array(self._target_locations, dtype=np.int64),
-            # "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
             }
