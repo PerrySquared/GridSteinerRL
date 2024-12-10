@@ -169,6 +169,9 @@ class GridWorldEnv(gym.Env):
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
 
+        if normalized_step_overflow / path_length == 0:
+            reward -= path_length/32
+        
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
             truncated = True
@@ -223,7 +226,7 @@ class GridWorldEnv(gym.Env):
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        # print(reward, action)
+        print(reward, action)
         return observation, reward, terminated, truncated, info
 
 
