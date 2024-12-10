@@ -15,14 +15,14 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 10000000000
+RENDER_EACH = 1000000000000000000
 RESET_EACH = 512
 
-TARGETS_TOTAL = 4
+TARGETS_TOTAL = 5
 
 LOCAL_AREA_SIZE = 32
 
-TEMP_GENERAL_OVERFLOW = np.zeros((1000,1000), dtype=np.float64)
+TEMP_GENERAL_OVERFLOW = np.zeros((5000,5000), dtype=np.float64)
 
 random.seed(11)
 
@@ -156,7 +156,7 @@ class GridWorldEnv(gym.Env):
         truncated = False
         
         self.iterations += 1
-        
+
         unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
   
         if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
@@ -168,6 +168,7 @@ class GridWorldEnv(gym.Env):
         # avg overflow per cell on path      
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
+        
 
         # if no overflow aim for the smallest path footprint 
         if normalized_step_overflow / path_length == 0:
@@ -227,7 +228,7 @@ class GridWorldEnv(gym.Env):
 
         reward /= TARGETS_TOTAL # divide the reward depending on the amount of targets in the task
         
-        print(reward, action)
+        # print(reward, action)
         return observation, reward, terminated, truncated, info
 
 
