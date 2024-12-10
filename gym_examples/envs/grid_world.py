@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1
-RESET_EACH = 1
+RENDER_EACH = 10000000000
+RESET_EACH = 512
 
 TARGETS_TOTAL = 4
 
@@ -51,15 +51,15 @@ class GridWorldEnv(gym.Env):
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
-                "target_list": spaces.Box(0, self.size, shape=(4,2), dtype=np.int64),
-                "targets_left": spaces.Discrete(5),
+                "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
+                "targets_left": spaces.Discrete(6),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
             }
         )
 
-        self.action_space = spaces.MultiDiscrete(np.array([4, 4]))
+        self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
         
         render_mode = "human"
         
@@ -90,10 +90,10 @@ class GridWorldEnv(gym.Env):
         global RESET_EACH
         global TARGETS_TOTAL
         
-        TASK_TARGETS = 4
+        TASK_TARGETS = 5
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
-            self._target_locations_copy = np.full((4,2), -1)
+            self._target_locations_copy = np.full((5,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, TASK_TARGETS, self.f)        
             
@@ -169,6 +169,7 @@ class GridWorldEnv(gym.Env):
         path_length = path_length if path_length > 0 else 1
         reward -= normalized_step_overflow / path_length
 
+        # if no overflow aim for the smallest path footprint 
         if normalized_step_overflow / path_length == 0:
             reward -= path_length/32
         
