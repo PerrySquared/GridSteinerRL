@@ -15,8 +15,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1000000000000000000
-RESET_EACH = 512
+RENDER_EACH = 1
+RESET_EACH = 1
 
 TARGETS_TOTAL = 5
 TASK_TARGETS = 5
@@ -41,8 +41,6 @@ class GridWorldEnv(gym.Env):
         self.env_steps = 0
         self.env_swaps = 0
         self.f = h5py.File('./gym_examples/envs/utils/dataset.h5', 'r')
-        
-        render_mode = None
         
         # self.observation_space = spaces.Box(0, 1, shape=(96, 96), dtype=np.float64)
         self.observation_space = spaces.Dict(
@@ -171,14 +169,16 @@ class GridWorldEnv(gym.Env):
             reward += 1 
             reward += TARGETS_TOTAL/5
             
-        # avg overflow per cell on path      
-        path_length = path_length if path_length > 0 else 1
-        reward -= normalized_step_overflow / path_length
-        
-
-        # if no overflow aim for the smallest path footprint 
+       
+        path_length = path_length if path_length > 0 else 1  
         if normalized_step_overflow / path_length == 0:
+            # if no overflow aim for the smallest path footprint 
             reward -= path_length/64
+            # print("no overflow", reward)
+        else:
+            # avg overflow per cell on path 
+            reward -= normalized_step_overflow / path_length
+            # print("overflow ", reward)
         
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
