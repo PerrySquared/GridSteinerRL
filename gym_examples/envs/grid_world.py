@@ -19,6 +19,7 @@ RENDER_EACH = 1000000000000000000
 RESET_EACH = 512
 
 TARGETS_TOTAL = 5
+TASK_TARGETS = 5
 
 LOCAL_AREA_SIZE = 32
 
@@ -28,15 +29,14 @@ random.seed(11)
 
 class GridWorldEnv(gym.Env):
     metadata = {"render_modes": ["human"], "render_fps": 1}
-
+    
     def __init__(self, render_mode=None, size=LOCAL_AREA_SIZE):
         self.size = size  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
         
-        self._target_locations_copy = []
-        self._agent_location_copy = []
-        self._target_locations = []
-        self._agent_location = []
+        self._target_locations_copy = np.zeros((LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64)
+        self._target_locations = np.zeros((LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64)
+        self._target_locations_used = np.zeros((TASK_TARGETS,2), dtype=np.int64)
         self.found_instance_index = 0
         self.env_steps = 0
         self.env_swaps = 0
@@ -51,15 +51,16 @@ class GridWorldEnv(gym.Env):
                 # "target_locations": spaces.Box(0, 5, shape=(self.size, self.size), dtype=np.float64),
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE), dtype=np.float64),
-                "target_list": spaces.Box(0, self.size, shape=(5,2), dtype=np.int64),
-                "targets_left": spaces.Discrete(6),
+                "target_list": spaces.Box(0, self.size, shape=(TASK_TARGETS,2), dtype=np.int64),
+                "target_list_used": spaces.Box(0, 1, shape=(TASK_TARGETS,2), dtype=np.int64),
+                # "targets_left": spaces.Discrete(6),
                 # "targets_relative_line": spaces.Discrete(5),
                 # "targets_relative_general": spaces.Box(0, 1, shape=(4,), dtype=int),
                 # add reference overflow matrix, i.e. cutout of the standard size from the general overflow 
             }
         )
 
-        self.action_space = spaces.MultiDiscrete(np.array([5, 5]))
+        self.action_space = spaces.MultiDiscrete(np.array([TASK_TARGETS, TASK_TARGETS]))
         
         render_mode = "human"
         
@@ -86,14 +87,16 @@ class GridWorldEnv(gym.Env):
         self.previous_actions = []
         # call for overflow class to create local overflow matrix
         self.Overflow = OverflowWithOverlap(TEMP_GENERAL_OVERFLOW, LOCAL_AREA_SIZE, LOCAL_AREA_SIZE)
+        self._target_locations_used = np.zeros((TASK_TARGETS,2), dtype=np.int64)
+        
 
         global RESET_EACH
         global TARGETS_TOTAL
         
-        TASK_TARGETS = 5
+        # print("---------")
         
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
-            self._target_locations_copy = np.full((5,2), -1)
+            self._target_locations_copy = np.full((TASK_TARGETS,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, TASK_TARGETS, self.f)        
             
@@ -157,7 +160,10 @@ class GridWorldEnv(gym.Env):
         
         self.iterations += 1
 
+        self._target_locations_used[action[:]] = 1
+        
         unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
+        
   
         if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
@@ -172,13 +178,13 @@ class GridWorldEnv(gym.Env):
 
         # if no overflow aim for the smallest path footprint 
         if normalized_step_overflow / path_length == 0:
-            reward -= path_length/32
+            reward -= path_length/64
         
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
             truncated = True
         
-        if self.iterations > 5: # quit if too many steps
+        if self.iterations > 7: # quit if too many steps
             reward -= 1
             truncated = True
         
@@ -314,7 +320,8 @@ class GridWorldEnv(gym.Env):
             "target_matrix": output_array,
             "reference_overflow_matrix": normalized_output_overflow,
             "target_list": np.array(self._target_locations, dtype=np.int64),
-            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+            "target_list_used": np.array(self._target_locations_used, dtype=np.int64),
+            # "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
             # "targets_relative_line": self.check_for_target_line(),
             # "targets_relative_general": self.check_for_target_general(),
             }
