@@ -15,11 +15,11 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1
-RESET_EACH = 1
+RENDER_EACH = 100000000000000
+RESET_EACH = 512
 
-TARGETS_TOTAL = 5
-TASK_TARGETS = 5
+TARGETS_TOTAL = 5 # CHANGES IF NOT TRAINED FOR A SINGLE TARGET AMOUNT! the amount of targets to extracted from the dataset
+TASK_TARGETS = 5 # for how many targets will be trained
 
 LOCAL_AREA_SIZE = 32
 

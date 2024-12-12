@@ -1,4 +1,5 @@
 import numpy as np
+import copy
 np.set_printoptions(threshold=np.inf)
 np.set_printoptions(linewidth=np.inf)
 import matplotlib.pyplot as plt
@@ -42,10 +43,12 @@ class OverflowWithOverlap():
         self.overflow_reference_matrix[:current_rows, :current_cols] = temp_matrix
 
     def get_manhattan_path(self, start, end):
+        state_before_new_path = copy.deepcopy(self.local_overflow_matrix)
+        
         x1, y1 = start
         x2, y2 = end
         
-        path_length = abs(x1 - x2) + abs(y1 - y2)
+        path_length = 0
         path_sum = 0
         normalized_path_sum = 0 
 
@@ -92,6 +95,9 @@ class OverflowWithOverlap():
                     
                 self.local_overflow_matrix[x][y1] = OVERFLOW_VALUE
 
+        # XOR with state after new path and get the length of non-intersection parth of the path
+        path_length = np.sum(np.logical_xor(state_before_new_path, self.local_overflow_matrix))    
+
         return path_sum, normalized_path_sum, path_length, self.local_overflow_matrix
 
     def get_both_manhattan_paths_sums(self, matrix, start, finish):
@@ -132,13 +138,14 @@ class OverflowWithOverlap():
 # general_overflow_matrix = np.zeros([16, 16]) 
 # local_overflow_matrix = np.zeros([16, 16]) 
 
-# c = OverflowWithOverlap(general_overflow_matrix, local_overflow_matrix, 16, 16)
+# c = OverflowWithOverlap(general_overflow_matrix, 16, 16)
 
 # print(c.get_manhattan_path((3,5), (8,9)))
 # print(c.get_manhattan_path((8,9), (10,3)))
 # print(c.get_manhattan_path((10,3), (6,2)))
 # print(c.get_manhattan_path((6,2), (1,7)))
 # print(c.get_manhattan_path((1,7), (6,0)))
+# print(c.get_manhattan_path((10,3), (8,14)))
 
 
 
