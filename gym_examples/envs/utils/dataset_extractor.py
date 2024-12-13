@@ -6,8 +6,6 @@ import sys
 np.set_printoptions(threshold=sys.maxsize)
 random.seed(11)
 
-MATRIX_SIZE = 64
-
 def display_heatmap(matrix):
     # print(type(matrix))
     plt.imshow(matrix, cmap='hot')
@@ -23,7 +21,7 @@ def get_coordinates(matrix):
     return coordinates
 
 
-def get_coords_dataset(start, target_amount, f):
+def get_coords_dataset(start, target_amount, f, matrix_size):
     # Open the HDF5 file
         
         group_keys = list(f.keys())
@@ -34,7 +32,7 @@ def get_coords_dataset(start, target_amount, f):
             key = group_keys[i]
             group = f[key]
             # Extract the matrix from the random dataset
-            matrix = np.zeros([MATRIX_SIZE, MATRIX_SIZE])
+            matrix = np.zeros([matrix_size, matrix_size])
             matrix = group[key][:]  # Access the "data" dataset within the group
             
             # plt.imshow(matrix)
@@ -44,12 +42,13 @@ def get_coords_dataset(start, target_amount, f):
             insertion_coords = group.attrs.get("insertion_coords", (0, 0))
             origin_shape = group.attrs.get("origin_shape", (0, 0))
 
-            # Check if the matrix has MATRIX_SIZE rows or less and MATRIX_SIZE columns or less
+            # Check if the matrix has matrix_size rows or less and matrix_size columns or less
             target_count_on_matrix = np.count_nonzero(matrix == 1)
-            if matrix.shape[0] < MATRIX_SIZE and matrix.shape[1] < MATRIX_SIZE and target_count_on_matrix == target_amount:
+            if matrix.shape[0] <= matrix_size and matrix.shape[1] <= matrix_size and target_count_on_matrix == target_amount:
                 # Pad the matrix if necessary
-                pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])), (0, max(0, MATRIX_SIZE - matrix.shape[1])))
+                pad_width = ((0, max(0, matrix_size - matrix.shape[0])), (0, max(0, matrix_size - matrix.shape[1])))
                 padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
+                # print(padded_matrix.shape)
                 # plt.imshow(padded_matrix)
                 # plt.show() 
                 

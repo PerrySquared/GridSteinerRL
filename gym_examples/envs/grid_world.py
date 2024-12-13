@@ -18,8 +18,8 @@ PATH_CELL = 1
 RENDER_EACH = 100000000000000
 RESET_EACH = 512
 
-TARGETS_TOTAL = 5 # CHANGES IF NOT TRAINED FOR A SINGLE TARGET AMOUNT! the amount of targets to extracted from the dataset
-TASK_TARGETS = 5 # for how many targets will be trained
+TARGETS_TOTAL = 3 # CHANGES IF NOT TRAINED FOR A SINGLE TARGET AMOUNT! the amount of targets to extracted from the dataset
+TASK_TARGETS = 3 # for how many targets will be trained
 
 LOCAL_AREA_SIZE = 32
 
@@ -96,7 +96,7 @@ class GridWorldEnv(gym.Env):
         if self.env_steps % RESET_EACH == 0:    # get new random env every 100 envs
             self._target_locations_copy = np.full((TASK_TARGETS,2), -1)
             # !!! instead of random iterate over extracted nets in order, slowly building up general overflow matrix and save it when no more nets left (building up when condition at the end of step is satisfied)
-            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, TASK_TARGETS, self.f)        
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset(self.found_instance_index + 1, TASK_TARGETS, self.f, LOCAL_AREA_SIZE)        
             
             TARGETS_TOTAL = len(temp_target_locations_copy)
             self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
@@ -184,7 +184,7 @@ class GridWorldEnv(gym.Env):
             reward -= 1
             truncated = True
         
-        if self.iterations > 7: # quit if too many steps
+        if self.iterations > 5: # quit if too many steps
             reward -= 1
             truncated = True
         
