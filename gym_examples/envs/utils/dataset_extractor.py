@@ -46,7 +46,7 @@ def get_coords_dataset(start, target_amount, f):
 
             # Check if the matrix has MATRIX_SIZE rows or less and MATRIX_SIZE columns or less
             target_count_on_matrix = np.count_nonzero(matrix == 1)
-            if matrix.shape[0] <= MATRIX_SIZE and matrix.shape[1] <= MATRIX_SIZE and target_count_on_matrix == target_amount:
+            if matrix.shape[0] < MATRIX_SIZE and matrix.shape[1] < MATRIX_SIZE and target_count_on_matrix == target_amount:
                 # Pad the matrix if necessary
                 pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])), (0, max(0, MATRIX_SIZE - matrix.shape[1])))
                 padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
