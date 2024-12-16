@@ -32,7 +32,7 @@ def make_env(env_id, id):
 
 if __name__ == "__main__":
     
-    PROCESSES_TO_TEST = 4
+    PROCESSES_TO_TEST = 6
     NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
     TRAIN_STEPS = 2000000
     EVAL_EPS = 100
