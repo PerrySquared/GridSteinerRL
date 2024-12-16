@@ -9,6 +9,7 @@ ppo_model.zip
 
 # Ignore TensorBoard logs
 gp_tensorboard/
+final_models/
 
 # Ignore utility scripts in the specified directory
 gym_examples/envs/utils/__pycache__/
