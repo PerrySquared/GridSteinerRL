@@ -16,14 +16,14 @@ TERMINAL_CELL = 2
 PATH_CELL = 1 
 
 RENDER_EACH = 100000000000000
-RESET_EACH = 512
+RESET_EACH = 1
 
 TARGETS_TOTAL = 5 # CHANGES IF NOT TRAINED FOR A SINGLE TARGET AMOUNT! the amount of targets to extracted from the dataset
 TASK_TARGETS = 5 # for how many targets will be trained
 
 LOCAL_AREA_SIZE = 32
 
-TEMP_GENERAL_OVERFLOW = np.zeros((5000,5000), dtype=np.float64)
+TEMP_GENERAL_OVERFLOW = np.zeros((1000,1000), dtype=np.float64)
 
 random.seed(11)
 
@@ -113,7 +113,10 @@ class GridWorldEnv(gym.Env):
         for _target_location in self._target_locations:
             if _target_location[0] != -1 and _target_location[1] != -1:
                 self.Overflow.local_overflow_matrix[_target_location[0], _target_location[1]] = TERMINAL_CELL
-            
+                
+        # print("---------------------------")
+        # print(self.found_instance_index)
+        # print(self.found_instance_index, self.Overflow.local_overflow_matrix)
         
         observation = self._get_obs()
         info = self._get_info()
@@ -167,7 +170,7 @@ class GridWorldEnv(gym.Env):
             terminated = True
             successful_path = True
             reward += 1 
-            reward += TARGETS_TOTAL/5
+            # reward += TARGETS_TOTAL/5
             
        
         path_length = path_length if path_length > 0 else 1  
@@ -184,7 +187,7 @@ class GridWorldEnv(gym.Env):
             reward -= 1
             truncated = True
         
-        if self.iterations > 5: # quit if too many steps
+        if self.iterations > TASK_TARGETS - 1: # quit if too many steps
             reward -= 1
             truncated = True
         
@@ -229,6 +232,7 @@ class GridWorldEnv(gym.Env):
             limit_row = self.origin_shape[0] - self.insertion_coords[0]
             limit_column = self.origin_shape[1] - self.insertion_coords[1]
             
+            # print(self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column])
             # maybe save only the most optimal local matrix, as of now it saves every correctly created one thus overloading the general matrix
             TEMP_GENERAL_OVERFLOW[self.insertion_coords[0]:upto_row, self.insertion_coords[1]:upto_column] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column] 
 

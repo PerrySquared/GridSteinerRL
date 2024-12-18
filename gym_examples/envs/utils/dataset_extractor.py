@@ -51,7 +51,7 @@ def get_coords_dataset(start, target_amount, f, matrix_size):
                 # print(padded_matrix.shape)
                 # plt.imshow(padded_matrix)
                 # plt.show() 
-                
+                # print(net_name)
                 # print(get_coordinates(padded_matrix), net_name, insertion_coords, origin_shape, i)
                 return get_coordinates(padded_matrix), net_name, insertion_coords, origin_shape, i
             # else:
