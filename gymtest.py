@@ -18,6 +18,7 @@ import os
 os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"
 
 
+
 def make_env(env_id, id):
     def _init():
 
@@ -34,8 +35,8 @@ if __name__ == "__main__":
     
     PROCESSES_TO_TEST = 6
     NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 2000000
-    EVAL_EPS = 100
+    TRAIN_STEPS = 1600000
+    EVAL_EPS = 5
     ALGO = PPO
 
     # We will create one environment to evaluate the agent on
@@ -70,16 +71,16 @@ if __name__ == "__main__":
                         train_env,
                         verbose=1, 
                         device="cuda",
-                        learning_rate=7e-5, 
-                        batch_size=64,
-                        gamma=0.95, 
-                        ent_coef=0.05, 
-                        clip_range=0.15,
+                        learning_rate=1e-5, 
+                        batch_size=256,
+                        gamma=0.995, 
+                        ent_coef=0.01, 
+                        clip_range=0.2,
                         tensorboard_log="./gp_tensorboard/",
                     )
         print(f"Using device: {model.device}")
 
-        model.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, callback=EvalCallback(train_env, best_model_save_path="./best_models", n_eval_episodes=EVAL_EPS, eval_freq=2048, verbose=1))
+        model.learn(total_timesteps=TRAIN_STEPS, progress_bar=True, callback=EvalCallback(train_env, best_model_save_path="./best_models", n_eval_episodes=EVAL_EPS, eval_freq=4096, verbose=1))
         
         print("\n=============\nEVAL STARTED\n=============\n")
         mean_reward, _ = evaluate_policy(model, eval_env, n_eval_episodes=EVAL_EPS)
@@ -89,13 +90,11 @@ if __name__ == "__main__":
     # otherwise, you may have memory issues when running a lot of experiments
     train_env.close()
     
-    model.save("ppo_model")
+    model.save("./final_models/ppo_model")
     print("\nMODEL SAVED\n")
     
     reward_averages.append(np.mean(rewards))
     reward_std.append(np.std(rewards))
-
-
 
     def plot_training_results(training_steps_per_second, reward_averages, reward_std):
         """
