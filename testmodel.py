@@ -12,7 +12,7 @@ from stable_baselines3.common.evaluation import evaluate_policy
 # Parallel environments 
 vec_env = make_vec_env("gym_examples/GridWorld-v0") 
  
-model = PPO.load("./best_models/best_model.zip", env=vec_env)
+model = PPO.load("./final_models/ppo_model.zip", env=vec_env)
 
 obs = vec_env.reset()
 # cell and hidden state of the LSTM

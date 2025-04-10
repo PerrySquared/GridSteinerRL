@@ -22,8 +22,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 1000000000000000
-RESET_EACH = 360
+RENDER_EACH = 10000000000000
+RESET_EACH = 128
 
 TARGETS_TOTAL = 5
 
@@ -189,7 +189,7 @@ class GridWorldEnv(gym.Env):
         if normalized_step_overflow > 0:
             reward -= normalized_step_overflow * 1.75
         else:
-            reward -= path_length * 0.01
+            reward -= path_length * 0.04
 
         # print("rew_of=",reward)
         # print("same pin ", action[0] == action[1])
@@ -218,11 +218,11 @@ class GridWorldEnv(gym.Env):
         # print("not connected ",  self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions))
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 0.6
+            reward -= 0.7
 
         # print("connected ", self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1])        
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
-            reward += 0.4
+            reward += 0.5
         
         # print('rew2=', reward)
             
@@ -240,7 +240,8 @@ class GridWorldEnv(gym.Env):
                     input("Press the <ENTER> key to continue...")
 
         # If terminated or truncated, add local overflow to general overflow
-        if self.env_steps % RESET_EACH == 0 and (terminated or truncated):
+        if self.env_steps % 8 == 0 and (terminated or truncated):
+        # if terminated:
             global TEMP_GENERAL_OVERFLOW
             
             # Update for 3D coordinates
