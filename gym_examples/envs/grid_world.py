@@ -22,8 +22,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 20000000000000000000
-RESET_EACH = 512
+RENDER_EACH = 1000000000000000
+RESET_EACH = 360
 
 TARGETS_TOTAL = 5
 
@@ -34,7 +34,7 @@ LAYERS = 6
 # Initialize with 3D matrix
 TEMP_GENERAL_OVERFLOW = np.zeros((1000, 1000, LAYERS), dtype=np.float64)
 
-random.seed(11)
+# random.seed(11)
 
 class GridWorldEnv(gym.Env):
     metadata = {"render_modes": ["human", "plotly"], "render_fps": 1}
@@ -102,6 +102,11 @@ class GridWorldEnv(gym.Env):
         # print("-reset-")
         
         if self.env_steps % RESET_EACH == 0:    # get new env every N envs
+            # for layer in range(LAYERS):
+            #     max_val = random.randint(1, 10)
+            #     min_val =  random.randint(0, max_val - 1)
+            #     self.Overflow.general_overflow_matrix[:,:,layer] = np.random.randint(min_val * 100, max_val * 100, size=(1000, 1000))
+            
             self._target_locations_copy = np.full((TARGETS_TOTAL, 3), -1)  # Updated to 3D coordinates
             # Get 3D coordinates from the dataset
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset_3d(self.found_instance_index + 1, TARGETS_TOTAL, self.f)        
@@ -182,7 +187,7 @@ class GridWorldEnv(gym.Env):
         
         # avg overflow per cell on path, if 0 then path length with a coef
         if normalized_step_overflow > 0:
-            reward -= normalized_step_overflow * 2
+            reward -= normalized_step_overflow * 1.75
         else:
             reward -= path_length * 0.01
 
@@ -213,11 +218,11 @@ class GridWorldEnv(gym.Env):
         # print("not connected ",  self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions))
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 0.5
+            reward -= 0.6
 
         # print("connected ", self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1])        
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
-            reward += 0.3
+            reward += 0.4
         
         # print('rew2=', reward)
             

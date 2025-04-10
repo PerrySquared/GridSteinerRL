@@ -35,7 +35,7 @@ if __name__ == "__main__":
     
     PROCESSES_TO_TEST = 4
     NUM_EXPERIMENTS = 1  # RL algorithms can often be unstable, so we run several experiments (see https://arxiv.org/abs/1709.06560)
-    TRAIN_STEPS = 6000000
+    TRAIN_STEPS = 3000000
     EVAL_EPS = 5
     ALGO = PPO
 
@@ -67,14 +67,14 @@ if __name__ == "__main__":
         # it is recommended to run several experiments due to variability in results
         train_env.reset()
         model = ALGO(
-                        "MultiInputPolicy", 
+                        "MultiInputPolicy",     
                         train_env,
                         verbose=1, 
                         device="cuda",
                         learning_rate=2e-5, 
                         batch_size=256,
                         gamma=0.995, 
-                        ent_coef=0.01, 
+                        ent_coef=0.015, 
                         clip_range=0.2,
                         tensorboard_log="./gp_tensorboard/",
                     )
