@@ -22,8 +22,8 @@ np.set_printoptions(threshold=sys.maxsize)
 TERMINAL_CELL = 2
 PATH_CELL = 1 
 
-RENDER_EACH = 2000
-RESET_EACH = 1
+RENDER_EACH = 20000000000000000000
+RESET_EACH = 512
 
 TARGETS_TOTAL = 5
 
@@ -61,13 +61,12 @@ class GridWorldEnv(gym.Env):
             {
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64),
-                "target_list": spaces.Box(0, self.size, shape=(TARGETS_TOTAL, 3), dtype=np.int64),  # Updated to 3D coordinates
+                "target_list": spaces.Box(0, self.size, shape=(TARGETS_TOTAL, 3), dtype=np.int64), 
                 "target_list_used": spaces.Box(0, 1, shape=(TARGETS_TOTAL, 3), dtype=np.int64),
             }
         )
 
-        # Keep the same action space, but now actions reference indices in the 3D target list
-        self.action_space = spaces.MultiDiscrete(np.array([TARGETS_TOTAL, TARGETS_TOTAL, 2, LAYERS])) # 2 is for which rectilinear path to take in 2D space
+        self.action_space = spaces.MultiDiscrete(np.array([TARGETS_TOTAL, TARGETS_TOTAL, 2, LAYERS])) # 2 is for which rectilinear path to take in the selected layer
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -102,7 +101,7 @@ class GridWorldEnv(gym.Env):
         
         # print("-reset-")
         
-        if self.env_steps % RESET_EACH == 0:    # get new random env every N envs
+        if self.env_steps % RESET_EACH == 0:    # get new env every N envs
             self._target_locations_copy = np.full((TARGETS_TOTAL, 3), -1)  # Updated to 3D coordinates
             # Get 3D coordinates from the dataset
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset_3d(self.found_instance_index + 1, TARGETS_TOTAL, self.f)        
@@ -135,18 +134,18 @@ class GridWorldEnv(gym.Env):
 
         return observation, info
     
-    def get_target_amount_sequence(self, env_swaps):
-        if env_swaps % 10 == 0:
-            print("env_swaps ", env_swaps)
+    # def get_target_amount_sequence(self, env_swaps):
+    #     if env_swaps % 10 == 0:
+    #         print("env_swaps ", env_swaps)
         
-        if env_swaps <= 800:
-            return 3
-        elif env_swaps > 800 and env_swaps <= 1600:
-            return 4
-        elif env_swaps > 1600 and env_swaps <= 3500:
-            return 5
-        else:
-            return 5
+    #     if env_swaps <= 800:
+    #         return 3
+    #     elif env_swaps > 800 and env_swaps <= 1600:
+    #         return 4
+    #     elif env_swaps > 1600 and env_swaps <= 3500:
+    #         return 5
+    #     else:
+    #         return 5
 
     def step(self, action):
 
@@ -183,22 +182,23 @@ class GridWorldEnv(gym.Env):
         
         # avg overflow per cell on path, if 0 then path length with a coef
         if normalized_step_overflow > 0:
-            reward -= normalized_step_overflow
+            reward -= normalized_step_overflow * 2
         else:
-            reward -= path_length * 0.005
+            reward -= path_length * 0.01
 
+        # print("rew_of=",reward)
         # print("same pin ", action[0] == action[1])
         # if both elements picked by action are the same to prevent just picking the terminals
         if action[0] == action[1]: 
-            reward -= 0.5
+            reward -= 1
         
         # the lower the layer the higher the neg reward
         # reward -= action[3] * 0.01
         
         # if changes layers after first move then neg reward
-        if self.iterations > 1:
-            if self.previous_actions[0][3] != action[3]:
-                reward -= 0.2
+        # if self.iterations > 1:
+        #     if self.previous_actions[0][3] != action[3]:
+        #         reward -= 0.1
             # for prev_action in self.previous_actions:
             #     if prev_action[3] == action[3]:
             #         reward += 0.1
@@ -213,13 +213,13 @@ class GridWorldEnv(gym.Env):
         # print("not connected ",  self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions))
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
-            reward -= 1
+            reward -= 0.5
 
         # print("connected ", self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1])        
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
-            reward += 0.4
+            reward += 0.3
         
-        # print('rew=', reward)
+        # print('rew2=', reward)
             
         self.previous_actions.append(action)
         
@@ -235,7 +235,7 @@ class GridWorldEnv(gym.Env):
                     input("Press the <ENTER> key to continue...")
 
         # If terminated or truncated, add local overflow to general overflow
-        if self.successful_path:
+        if self.env_steps % RESET_EACH == 0 and (terminated or truncated):
             global TEMP_GENERAL_OVERFLOW
             
             # Update for 3D coordinates
@@ -255,11 +255,12 @@ class GridWorldEnv(gym.Env):
             ] += self.Overflow.local_overflow_matrix[0:limit_row, 0:limit_column, 0:limit_z]
             
         # Scale the reward from [-2.76, 0.7] to [-1, 1] using the formula
-        # scaled_reward = -1 + ((reward + 3.26) * 2) / 4.66
+        # new_value = new_min + (old_value - old_min) * (new_max - new_min) / (old_max - old_min)
+        # scaled_reward = -1 + ((reward + 3.1) * 2)/4.6
         # Clip to ensure the scaled reward stays within [-1, 1]
-        scaled_reward = np.clip(reward, -1, 1)
+        # scaled_reward = np.clip(scaled_reward, -1, 1)
         
-        return observation, scaled_reward, terminated, truncated, info
+        return observation, reward, terminated, truncated, info
 
     def _move(self, action):
         first_terminal = self._target_locations[action[0]]
@@ -311,10 +312,9 @@ class GridWorldEnv(gym.Env):
         
         output_overflow_min = output_overflow.min()
         output_overflow_max = output_overflow.max()
-        if output_overflow_min == output_overflow_max:
-            normalized_output_overflow = output_overflow * 0
-        else:
-            normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
+        denominator = max(output_overflow_max - output_overflow_min, 1)
+
+        normalized_output_overflow = (output_overflow - output_overflow_min) / denominator
             
         return {
             "target_matrix": output_array,

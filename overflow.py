@@ -108,27 +108,6 @@ class OverflowWithOverlap():
 
         return smaller_overflow, smaller_overflow_matrix
 
-    def add_path_section_to_path_only_matrix(self, cell):
-        x, y = cell
-        self.path_only_matrix[x][y] = 1
-        
-    def display_matrices(self):
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))  # Adjust figsize as needed
-
-        # Display each matrix in its subplot
-        axes[0].imshow(self.general_overflow_matrix, aspect='auto')  # 'aspect' can be adjusted
-        axes[0].set_title('General Overflow Matrix')
-
-        axes[1].imshow(self.overflow_reference_matrix, aspect='auto')
-        axes[1].set_title('Overflow Reference Matrix')
-
-        axes[2].imshow(self.local_overflow_matrix, aspect='auto')
-        axes[2].set_title('Local Overflow Matrix')
-
-
-        # Show the plot with all three matrices
-        plt.tight_layout()  # Adjust layout to prevent overlap
-        plt.show()
 
 class OverflowWithOverlap3D():
     def __init__(self, general_overflow_matrix, rows, columns, layers):
@@ -180,6 +159,7 @@ class OverflowWithOverlap3D():
         ref_min = np.min(self.overflow_reference_matrix)
         ref_max = np.max(self.overflow_reference_matrix)
         denominator = max(ref_max - ref_min, 1)
+        overflow_reference_matrix_normalized = (self.overflow_reference_matrix - ref_min) / denominator
         
         # Calculate target layer Z or use end Z
         z_target = target_layer if target_layer is not None else z2
@@ -199,7 +179,7 @@ class OverflowWithOverlap3D():
             if not (x == x2 and y == y2 and z == z2) and not (x == x1 and y == y1 and z == z1) and self.local_overflow_matrix[x, y, z] == 0:
                 # print(self.overflow_reference_matrix[x, y, z])
                 path_sum += self.overflow_reference_matrix[x, y, z]
-                sum_of_normalized_values += (self.overflow_reference_matrix[x, y, z] - ref_min) / denominator
+                sum_of_normalized_values += overflow_reference_matrix_normalized[x, y, z]
                 path_length += 1
             self.local_overflow_matrix[x, y, z] = OVERFLOW_VALUE
         
@@ -257,27 +237,7 @@ class OverflowWithOverlap3D():
         # print(path_sum, avg_normalized_value, path_length, "\n-------------------\n")
         return path_sum, avg_normalized_value, path_length, self.local_overflow_matrix
     
-    def add_path_section_to_path_only_matrix(self, cell):
-        x, y, z = cell
-        self.path_only_matrix[x][y][z] = 1
         
-    def display_matrices(self):
-        # Display central slices of the 3D matrices
-        mid_layer = self.layers // 2
-        
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-
-        axes[0].imshow(self.general_overflow_matrix[mid_layer], aspect='auto')
-        axes[0].set_title(f'General Overflow Matrix (Layer {mid_layer})')
-
-        axes[1].imshow(self.overflow_reference_matrix[mid_layer], aspect='auto')
-        axes[1].set_title(f'Overflow Reference Matrix (Layer {mid_layer})')
-
-        axes[2].imshow(self.local_overflow_matrix[mid_layer], aspect='auto')
-        axes[2].set_title(f'Local Overflow Matrix (Layer {mid_layer})')
-
-        plt.tight_layout()
-        plt.show()
 
 
 
