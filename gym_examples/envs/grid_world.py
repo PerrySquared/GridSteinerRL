@@ -23,9 +23,7 @@ TERMINAL_CELL = 2
 PATH_CELL = 1 
 
 RENDER_EACH = 10000000000000
-RESET_EACH = 128
-
-TARGETS_TOTAL = 5
+RESET_EACH = 1
 
 # Updated for 3D
 LOCAL_AREA_SIZE = 32  # Reduced to make 3D visualization more manageable
@@ -33,26 +31,33 @@ LAYERS = 6
 
 # Initialize with 3D matrix
 TEMP_GENERAL_OVERFLOW = np.zeros((1000, 1000, LAYERS), dtype=np.float64)
-
+BACKUP_LOCAL_OVERFLOW = np.zeros((32, 32, LAYERS), dtype=np.float64)
 # random.seed(11)
 
 class GridWorldEnv(gym.Env):
     metadata = {"render_modes": ["human", "plotly"], "render_fps": 1}
 
-    def __init__(self, render_mode=None, size=LOCAL_AREA_SIZE):
+    def __init__(self, render_mode=None, size=LOCAL_AREA_SIZE, ppo_aproach=True, pins=2, 
+                 general_overflow_matrix=None, file = None):
         self.size = size  # The size of the cubic grid
         self.window_size = 512  # The size of the PyGame window
         
+        # Store the parameters passed via env_kwargs
+        self.ppo_aproach = ppo_aproach
+        self.pins = pins
+        self.general_overflow_matrix = general_overflow_matrix if general_overflow_matrix is not None else TEMP_GENERAL_OVERFLOW
+        self.f = file
+        
         self._target_locations_copy = np.zeros((LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64)
         self._target_locations = np.zeros((LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64)
-        self._target_locations_used = np.zeros((TARGETS_TOTAL, 3), dtype=np.int64)
+        self._target_locations_used = np.zeros((self.pins, 3), dtype=np.int64)
         
         self._agent_location_copy = []
         self._agent_location = []
         self.found_instance_index = 0
         self.env_steps = 0
         self.env_swaps = 0
-        self.f = h5py.File('./gym_examples/envs/utils/dataset_3d.h5', 'r')
+        
         
         render_mode = "plotly"
         
@@ -61,12 +66,12 @@ class GridWorldEnv(gym.Env):
             {
                 "target_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64),
                 "reference_overflow_matrix": spaces.Box(0, 1, shape=(LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS), dtype=np.float64),
-                "target_list": spaces.Box(0, self.size, shape=(TARGETS_TOTAL, 3), dtype=np.int64), 
-                "target_list_used": spaces.Box(0, 1, shape=(TARGETS_TOTAL, 3), dtype=np.int64),
+                "target_list": spaces.Box(0, self.size, shape=(self.pins, 3), dtype=np.int64), 
+                "target_list_used": spaces.Box(0, 1, shape=(self.pins, 3), dtype=np.int64),
             }
         )
 
-        self.action_space = spaces.MultiDiscrete(np.array([TARGETS_TOTAL, TARGETS_TOTAL, 2, LAYERS])) # 2 is for which rectilinear path to take in the selected layer
+        self.action_space = spaces.MultiDiscrete(np.array([self.pins, self.pins, 2, LAYERS])) # 2 is for which rectilinear path to take in the selected layer
         
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self.render_mode = render_mode
@@ -85,6 +90,7 @@ class GridWorldEnv(gym.Env):
     def reset(self, seed=None, options=None):
         self.iterations = 0
         self.successful_path = False
+        self.failed_path = False
         self.total_footprint = 0
         self.initial_targets_amount = 1
         self.stagnate_counter = 0
@@ -92,12 +98,11 @@ class GridWorldEnv(gym.Env):
         
 
         global RESET_EACH
-        global TARGETS_TOTAL
         
         # Call for 3D overflow class to create local overflow matrix
-        self.Overflow = OverflowWithOverlap3D(TEMP_GENERAL_OVERFLOW, LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS)
+        self.Overflow = OverflowWithOverlap3D(self.general_overflow_matrix, LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS)
         
-        self._target_locations_used = np.zeros((TARGETS_TOTAL, 3), dtype=np.int64)
+        self._target_locations_used = np.zeros((self.pins, 3), dtype=np.int64)
         
         # print("-reset-")
         
@@ -107,12 +112,17 @@ class GridWorldEnv(gym.Env):
             #     min_val =  random.randint(0, max_val - 1)
             #     self.Overflow.general_overflow_matrix[:,:,layer] = np.random.randint(min_val * 100, max_val * 100, size=(1000, 1000))
             
-            self._target_locations_copy = np.full((TARGETS_TOTAL, 3), -1)  # Updated to 3D coordinates
+            self._target_locations_copy = np.full((self.pins, 3), -1)  # Updated to 3D coordinates
             # Get 3D coordinates from the dataset
-            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset_3d(self.found_instance_index + 1, TARGETS_TOTAL, self.f)        
+            temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset_3d(self.found_instance_index + 1, self.pins, self.f) 
             
-            TARGETS_TOTAL = len(temp_target_locations_copy)
-            self._target_locations_copy[:TARGETS_TOTAL] = temp_target_locations_copy
+            if not self.net_name:
+                observation = self._get_obs()
+                info = self._get_info()
+                return observation, info
+                
+            self.pins = len(temp_target_locations_copy)
+            self._target_locations_copy[:self.pins] = temp_target_locations_copy
             
             self.env_swaps += 1
             
@@ -126,7 +136,10 @@ class GridWorldEnv(gym.Env):
             if _target_location[0] != -1 and _target_location[1] != -1 and _target_location[2] != -1:
                 # print(_target_location[0], _target_location[1], _target_location[2])
                 self.Overflow.local_overflow_matrix[_target_location[0], _target_location[1], _target_location[2]] = TERMINAL_CELL
-            
+        
+        global BACKUP_LOCAL_OVERFLOW
+        BACKUP_LOCAL_OVERFLOW = copy.deepcopy(self.Overflow.local_overflow_matrix)
+        
         observation = self._get_obs()
         info = self._get_info()
         # print(info)
@@ -153,9 +166,12 @@ class GridWorldEnv(gym.Env):
     #         return 5
 
     def step(self, action):
-
-        global TARGETS_TOTAL
         
+        if not self.net_name:
+            observation = self._get_obs()
+            info = self._get_info()
+            return observation, 0, False, True, info
+              
         reward = 0
         terminated = False     
         truncated = False
@@ -173,17 +189,21 @@ class GridWorldEnv(gym.Env):
             terminated = True
             self.successful_path = True
             reward += 1
-            # reward += TARGETS_TOTAL/5
+            # reward += self.pins/5
         
         # print("unsuc move ", unsuccessful_move)
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
-            truncated = True
+            truncated = True         
         
         # print("iter ", self.iterations)
         if self.iterations > 5: # quit if too many steps
             reward -= 1
             truncated = True
+            self.failed_path = True
+            
+            # backup solution with a switch here
+            # print("fuck")
         
         # avg overflow per cell on path, if 0 then path length with a coef
         if normalized_step_overflow > 0:
@@ -240,9 +260,8 @@ class GridWorldEnv(gym.Env):
                     input("Press the <ENTER> key to continue...")
 
         # If terminated or truncated, add local overflow to general overflow
-        if self.env_steps % 8 == 0 and (terminated or truncated):
+        if self.env_steps % 1 == 0 and (terminated or truncated):
         # if terminated:
-            global TEMP_GENERAL_OVERFLOW
             
             # Update for 3D coordinates
             upto_row = min(self.insertion_coords[0] + LOCAL_AREA_SIZE, self.origin_shape[0])
@@ -254,7 +273,7 @@ class GridWorldEnv(gym.Env):
             limit_z = self.origin_shape[2] - self.insertion_coords[2]
             # print("===================")
 
-            TEMP_GENERAL_OVERFLOW[
+            self.general_overflow_matrix[
                 self.insertion_coords[0]:upto_row, 
                 self.insertion_coords[1]:upto_column,
                 self.insertion_coords[2]:upto_z
@@ -352,25 +371,31 @@ class GridWorldEnv(gym.Env):
         return resized_array
 
     def _get_info(self):
-        output_shape = (LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS)
-        padding = ((3, 3), (3, 3), (3, 3))  # Padding in all three dimensions
-        
-        output_array = self.resize_3d(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape)
-        output_overflow = self.resize_3d(self.Overflow.overflow_reference_matrix, output_shape)
-        
-        output_overflow_min = output_overflow.min()
-        output_overflow_max = output_overflow.max()
-        if output_overflow_min == output_overflow_max:
-            normalized_output_overflow = output_overflow * 0
-        else:
-            normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
-        
         return {
-            "target_matrix_shape": output_array.shape,
-            "reference_overflow_matrix_shape": normalized_output_overflow.shape,
-            "target_list": np.array(self._target_locations, dtype=np.int64),
-            "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+            'insertion_coords': self.insertion_coords,
+            'origin_shape': self.origin_shape,
+            'local_overflow_matrix': BACKUP_LOCAL_OVERFLOW,
+            'reference_overflow_matrix': self.Overflow.overflow_reference_matrix
         }
+        # output_shape = (LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS)
+        # padding = ((3, 3), (3, 3), (3, 3))  # Padding in all three dimensions
+        
+        # output_array = self.resize_3d(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape)
+        # output_overflow = self.resize_3d(self.Overflow.overflow_reference_matrix, output_shape)
+        
+        # output_overflow_min = output_overflow.min()
+        # output_overflow_max = output_overflow.max()
+        # if output_overflow_min == output_overflow_max:
+        #     normalized_output_overflow = output_overflow * 0
+        # else:
+        #     normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
+        
+        # return {
+        #     "target_matrix_shape": output_array.shape,
+        #     "reference_overflow_matrix_shape": normalized_output_overflow.shape,
+        #     "target_list": np.array(self._target_locations, dtype=np.int64),
+        #     "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
+        # }
 
 
     def _render_frame(self):

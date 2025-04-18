@@ -71,12 +71,12 @@ def get_coordinates_3d(matrix):
     return coordinates
 
 
-def get_coords_dataset_3d(start, target_amount, f):
+def get_coords_dataset_3d(start, target_amount, f, limited_size=True):
 
     group_keys = list(f.keys())
     
     for i in range(start, len(group_keys)):
-        # print(i)
+
         key = group_keys[i]
         group = f[key]
 
@@ -86,30 +86,34 @@ def get_coords_dataset_3d(start, target_amount, f):
         
         # print(matrix.shape)
         net_name = group.attrs.get("net_name", "Unknown")
-
         insertion_coords = group.attrs.get("insertion_coords", (0, 0, 0))
         origin_shape = group.attrs.get("origin_shape", (0, 0, 0))
 
         target_count_on_matrix = np.count_nonzero(matrix == 1)
-            
-        if (matrix.shape[0] < MATRIX_SIZE and 
-            matrix.shape[1] < MATRIX_SIZE and 
-            target_count_on_matrix == target_amount):
-            
-            pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])),
-                        (0, max(0, MATRIX_SIZE - matrix.shape[1])),
-                        (0, 0))
-            
-            padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
-            
-            insertion_coords = np.append(insertion_coords, 0)
-            # print(net_name, insertion_coords, origin_shape, i)
-            return get_coordinates_3d(padded_matrix), net_name, insertion_coords, origin_shape, i
-            
-    return False, False, False, False, False
+        
+        if limited_size:
+            if (matrix.shape[0] < MATRIX_SIZE and 
+                matrix.shape[1] < MATRIX_SIZE and 
+                target_count_on_matrix == target_amount):
                 
+                pad_width = ((0, max(0, MATRIX_SIZE - matrix.shape[0])),
+                            (0, max(0, MATRIX_SIZE - matrix.shape[1])),
+                            (0, 0))
+                
+                padded_matrix = np.pad(matrix, pad_width, mode='constant', constant_values=0)
+                
+                insertion_coords = np.append(insertion_coords, 0)
+                
+                return get_coordinates_3d(padded_matrix), net_name, insertion_coords, origin_shape, matrix.shape, i
+        else:
+            if (matrix.shape[0] >= MATRIX_SIZE and 
+                matrix.shape[1] >= MATRIX_SIZE):
+                
+                insertion_coords = np.append(insertion_coords, 0)
+                return get_coordinates_3d(matrix), net_name, insertion_coords, origin_shape, matrix.shape, i
             
-            
+    return False, False, False, False, False        
+    
 # import nexusformat.nexus as nx
 # f = nx.nxload('./dataset.h5')
 # print(f.tree)

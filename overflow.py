@@ -189,7 +189,8 @@ class OverflowWithOverlap3D():
         if z1 != z_target:
             for z in range(z1 + z_step, z_target + z_step, z_step):
                 if not (x_current == x2 and y_current == y2 and z == z2):
-                    process_point(x_current, y_current, z)
+                    # process_point(x_current, y_current, z)
+                    continue
         
         # 2. Movement on target layer
         if path_type == 0:  # X → Y
@@ -229,7 +230,8 @@ class OverflowWithOverlap3D():
             z_step = 1 if z2 > z_target else -1
             for z in range(z_target + z_step, z2, z_step):
                 if not (x_current == x2 and y_current == y2 and z == z2):
-                    process_point(x_current, y_current, z)
+                    # process_point(x_current, y_current, z)
+                    continue
         
         # Calculate average normalized value
         avg_normalized_value = sum_of_normalized_values / path_length if path_length > 0 else 0
