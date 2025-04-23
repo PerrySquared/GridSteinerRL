@@ -203,7 +203,6 @@ class GridWorldEnv(gym.Env):
             self.failed_path = True
             
             # backup solution with a switch here
-            # print("fuck")
         
         # avg overflow per cell on path, if 0 then path length with a coef
         if normalized_step_overflow > 0:
@@ -211,8 +210,6 @@ class GridWorldEnv(gym.Env):
         else:
             reward -= path_length * 0.04
 
-        # print("rew_of=",reward)
-        # print("same pin ", action[0] == action[1])
         # if both elements picked by action are the same to prevent just picking the terminals
         if action[0] == action[1]: 
             reward -= 1
@@ -365,7 +362,6 @@ class GridWorldEnv(gym.Env):
         # Trim to desired shape
         resized_array = repeated_layers[:output_shape[0], :output_shape[1], :output_shape[2]]
         
-        # Padding commented out just like in your original function
         # padded_array = np.pad(resized_array, padding, mode='constant', constant_values=0)
         
         return resized_array
@@ -377,25 +373,6 @@ class GridWorldEnv(gym.Env):
             'local_overflow_matrix': BACKUP_LOCAL_OVERFLOW,
             'reference_overflow_matrix': self.Overflow.overflow_reference_matrix
         }
-        # output_shape = (LOCAL_AREA_SIZE, LOCAL_AREA_SIZE, LAYERS)
-        # padding = ((3, 3), (3, 3), (3, 3))  # Padding in all three dimensions
-        
-        # output_array = self.resize_3d(np.divide(self.Overflow.local_overflow_matrix, 2), output_shape)
-        # output_overflow = self.resize_3d(self.Overflow.overflow_reference_matrix, output_shape)
-        
-        # output_overflow_min = output_overflow.min()
-        # output_overflow_max = output_overflow.max()
-        # if output_overflow_min == output_overflow_max:
-        #     normalized_output_overflow = output_overflow * 0
-        # else:
-        #     normalized_output_overflow = (output_overflow - output_overflow_min) / (output_overflow_max - output_overflow_min)
-        
-        # return {
-        #     "target_matrix_shape": output_array.shape,
-        #     "reference_overflow_matrix_shape": normalized_output_overflow.shape,
-        #     "target_list": np.array(self._target_locations, dtype=np.int64),
-        #     "targets_left": np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL),
-        # }
 
 
     def _render_frame(self):
