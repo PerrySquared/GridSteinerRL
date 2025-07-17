@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
 """
-FullGlobalRouter.py
-
-This module implements the full‐feature global routing stage modeled on the original BoxRouter global routing,
-with all advanced features:
-  • Pre‑Routing Congestion Prediction
-  • Box Expansion Strategy (with domain‐limiting A* search)
-  • Progressive ILP Optimization (with flow conservation constraints)
-  • Negotiation‑Based A* Search (with nonlinear advanced cost functions)
-  • Topology‑Aware Wire Rip‑up/Rerouting
-  • Layer Assignment and Via Optimization
-  • Advanced Congestion Cost Functions
-
-I/O:
   - Input:
        pin_matrix: a binary 3D NumPy array (cells with 1 mark pins).
        usage_matrix: a 3D integer NumPy array (same dimensions) of current cell usage.
   - Output:
        route_matrix: a single 3D route matrix (same dimensions) containing the complete routed net.
-       
-A Plotly visualization is provided that overlays the usage gradient, routed net (red), and pin locations (bright green).
-
-Dependencies: numpy, heapq, pulp, plotly
 """
 
 import numpy as np
@@ -49,7 +32,6 @@ class Point:
 # Advanced Congestion Cost Function (nonlinear)
 # -------------------------------------------------------------
 def advanced_cost(usage_val: float, alpha: float) -> float:
-    """Nonlinear cost: base cost 1 plus alpha * usage^2."""
     return 1 + alpha * (usage_val ** 2)
 
 # -------------------------------------------------------------
@@ -58,6 +40,7 @@ def advanced_cost(usage_val: float, alpha: float) -> float:
 def pre_routing_congestion_prediction(usage: np.ndarray) -> np.ndarray:
     dims = usage.shape
     predicted = np.zeros(dims, dtype=float)
+  
     for x in range(dims[0]):
         for y in range(dims[1]):
             for z in range(dims[2]):
@@ -70,6 +53,7 @@ def pre_routing_congestion_prediction(usage: np.ndarray) -> np.ndarray:
                                 total += usage[nx, ny, nz]
                                 count += 1
                 predicted[x,y,z] = total / count
+              
     return predicted
 
 # -------------------------------------------------------------
@@ -80,6 +64,7 @@ def box_expansion_strategy(net_bbox: Tuple[Tuple[int,int,int], Tuple[int,int,int
     expand = min(iteration, max_expand)
     new_min = tuple(max(0, min_xyz[i]-expand) for i in range(3))
     new_max = tuple(max_xyz[i]+expand for i in range(3))
+  
     return new_min, new_max
 
 # -------------------------------------------------------------
@@ -88,10 +73,12 @@ def box_expansion_strategy(net_bbox: Tuple[Tuple[int,int,int], Tuple[int,int,int
 def get_neighbors_in_box(pt: Point, dims: Tuple[int,int,int], box: Tuple[Tuple[int,int,int], Tuple[int,int,int]]) -> List[Point]:
     new_neighbors = []
     min_box, max_box = box
+  
     for dx, dy, dz in [(1,0,0), (-1,0,0), (0,1,0), (0,-1,0), (0,0,1), (0,0,-1)]:
         nx, ny, nz = pt.x+dx, pt.y+dy, pt.z+dz
         if (min_box[0] <= nx < min(max_box[0], dims[0])) and (min_box[1] <= ny < min(max_box[1], dims[1])) and (min_box[2] <= nz < min(max_box[2], dims[2])):
             new_neighbors.append(Point(nx,ny,nz))
+          
     return new_neighbors
 
 # -------------------------------------------------------------
@@ -117,8 +104,10 @@ def negotiation_based_A_star(start: Point, end: Point, internal_usage: np.ndarra
         came_from = {}
         cost_so_far = {start: 0}
         found = False
+      
         while open_heap:
             prio, _, current_cost, current = heapq.heappop(open_heap)
+          
             if current == end:
                 # Reconstruct path
                 route = []
@@ -129,6 +118,7 @@ def negotiation_based_A_star(start: Point, end: Point, internal_usage: np.ndarra
                 route.reverse()
                 found = True
                 break
+              
             for nb in restricted_neighbors(current):
                 new_cost = cost_so_far[current] + advanced_cost(internal_usage[nb.x, nb.y, nb.z], alpha)
                 if nb not in cost_so_far or new_cost < cost_so_far[nb]:
@@ -137,6 +127,7 @@ def negotiation_based_A_star(start: Point, end: Point, internal_usage: np.ndarra
                     counter += 1
                     heapq.heappush(open_heap, (priority, counter, new_cost, nb))
                     came_from[nb] = current
+                  
         if found and route is not None:
             # Check if any cell in the route has usage above a threshold; if so, add penalty and renegotiate.
             high_cong = False
@@ -148,6 +139,7 @@ def negotiation_based_A_star(start: Point, end: Point, internal_usage: np.ndarra
                 continue  # rerun the negotiation loop
             else:
                 return route
+              
     return route
 
 # -------------------------------------------------------------
@@ -170,7 +162,7 @@ def solve_edge_ILP(start: Point, end: Point, usage: np.ndarray, dims: Tuple[int,
                 cell = (x,y,z)
                 valid_cells.append(cell)
                 cell_vars[cell] = pl.LpVariable(f"x_{x}_{y}_{z}", 0, 1, pl.LpBinary)
-    # Objective: minimize sum of advanced cost over valid cells.
+    # minimize sum of advanced cost over valid cells.
     prob += pl.lpSum([ advanced_cost(usage[x,y,z], alpha) * cell_vars[(x,y,z)] for (x,y,z) in valid_cells ])
     # Flow conservation: for each cell, define inflow minus outflow equals b.
     # For simplicity, we assume 6-neighborhood connectivity.
@@ -196,10 +188,12 @@ def solve_edge_ILP(start: Point, end: Point, usage: np.ndarray, dims: Tuple[int,
     prob.solve(pl.PULP_CBC_CMD(msg=0))
     if pl.LpStatus[prob.status] != "Optimal":
         return None
+      
     route_ilp = np.zeros(dims, dtype=int)
     for cell in valid_cells:
         if pl.value(cell_vars[cell]) is not None and pl.value(cell_vars[cell]) > 0.5:
             route_ilp[cell] = 1
+          
     return route_ilp
 
 # -------------------------------------------------------------
@@ -216,11 +210,13 @@ def topology_aware_wire_ripup_rerouting(route_matrix: np.ndarray, usage: np.ndar
     def dfs(cell, comp):
         x,y,z = cell
         stack = [cell]
+      
         while stack:
             curr = stack.pop()
             cx,cy,cz = curr
             if visited[cx,cy,cz]:
                 continue
+              
             visited[cx,cy,cz] = True
             comp.append(curr)
             for dx,dy,dz in [(1,0,0),(-1,0,0),(0,1,0),(0,-1,0),(0,0,1),(0,0,-1)]:
@@ -228,6 +224,7 @@ def topology_aware_wire_ripup_rerouting(route_matrix: np.ndarray, usage: np.ndar
                 if 0 <= nx < dims[0] and 0 <= ny < dims[1] and 0 <= nz < dims[2]:
                     if route_matrix[nx,ny,nz] == 1 and not visited[nx,ny,nz]:
                         stack.append((nx,ny,nz))
+                      
     for x in range(dims[0]):
         for y in range(dims[1]):
             for z in range(dims[2]):
@@ -298,6 +295,7 @@ def layer_assignment_and_via_optimization(route_matrix: np.ndarray) -> np.ndarra
     for cell, var in layer_vars.items():
         if pl.value(var) is not None and pl.value(var) >= 0.5:
             layer_matrix[cell] = 1
+          
     return layer_matrix
 
 
@@ -307,6 +305,7 @@ def layer_assignment_and_via_optimization(route_matrix: np.ndarray) -> np.ndarra
 def compute_MST(pins: List[Point]) -> List[Tuple[Point, Point]]:
     if not pins:
         return []
+      
     mst_edges = []
     in_tree = {pins[0]}
     not_in_tree = set(pins[1:])
@@ -324,6 +323,7 @@ def compute_MST(pins: List[Point]) -> List[Tuple[Point, Point]]:
         u,v = best_edge
         in_tree.add(v)
         not_in_tree.remove(v)
+      
     return mst_edges
 
 # -------------------------------------------------------------
@@ -399,6 +399,7 @@ class FullGlobalRouter:
 def visualize_full(usage: np.ndarray, route: np.ndarray, pin_matrix: np.ndarray, layer: Optional[np.ndarray] = None):
     dims = usage.shape
     xs, ys, zs, cell_vals, hover_text = [], [], [], [], []
+  
     for x in range(dims[0]):
         for y in range(dims[1]):
             for z in range(dims[2]):
