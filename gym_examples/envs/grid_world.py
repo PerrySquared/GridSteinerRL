@@ -104,8 +104,6 @@ class GridWorldEnv(gym.Env):
         
         self._target_locations_used = np.zeros((self.pins, 3), dtype=np.int64)
         
-        # print("-reset-")
-        
         if self.env_steps % RESET_EACH == 0:    # get new env every N envs
             # for layer in range(LAYERS):
             #     max_val = random.randint(1, 10)
@@ -113,7 +111,7 @@ class GridWorldEnv(gym.Env):
             #     self.Overflow.general_overflow_matrix[:,:,layer] = np.random.randint(min_val * 100, max_val * 100, size=(1000, 1000))
             
             self._target_locations_copy = np.full((self.pins, 3), -1)  # Updated to 3D coordinates
-            # Get 3D coordinates from the dataset
+
             temp_target_locations_copy, self.net_name, self.insertion_coords, self.origin_shape, self.found_instance_index = get_coords_dataset_3d(self.found_instance_index + 1, self.pins, self.f) 
             
             if not self.net_name:
@@ -134,7 +132,6 @@ class GridWorldEnv(gym.Env):
 
         for _target_location in self._target_locations:
             if _target_location[0] != -1 and _target_location[1] != -1 and _target_location[2] != -1:
-                # print(_target_location[0], _target_location[1], _target_location[2])
                 self.Overflow.local_overflow_matrix[_target_location[0], _target_location[1], _target_location[2]] = TERMINAL_CELL
         
         global BACKUP_LOCAL_OVERFLOW
@@ -142,8 +139,7 @@ class GridWorldEnv(gym.Env):
         
         observation = self._get_obs()
         info = self._get_info()
-        # print(info)
-        
+
         if self.env_steps % RENDER_EACH == 0: # render only mod N env
             if self.render_mode == "human":
                 self._render_frame()
@@ -151,19 +147,6 @@ class GridWorldEnv(gym.Env):
                 self._render_plotly()
 
         return observation, info
-    
-    # def get_target_amount_sequence(self, env_swaps):
-    #     if env_swaps % 10 == 0:
-    #         print("env_swaps ", env_swaps)
-        
-    #     if env_swaps <= 800:
-    #         return 3
-    #     elif env_swaps > 800 and env_swaps <= 1600:
-    #         return 4
-    #     elif env_swaps > 1600 and env_swaps <= 3500:
-    #         return 5
-    #     else:
-    #         return 5
 
     def step(self, action):
         
@@ -178,12 +161,8 @@ class GridWorldEnv(gym.Env):
         
         self.iterations += 1
         
-        # print(action)
-        
         self._target_locations_used[action[0:2]] = 1
-        # print(self._target_locations)
         unsuccessful_move, step_overflow, normalized_step_overflow, path_length = self._move(action) # update the position
-        # print(normalized_step_overflow)
         
         if np.count_nonzero(self.Overflow.local_overflow_matrix == TERMINAL_CELL) == 0: # successful game over (no terminals left)
             terminated = True
@@ -191,12 +170,10 @@ class GridWorldEnv(gym.Env):
             reward += 1
             # reward += self.pins/5
         
-        # print("unsuc move ", unsuccessful_move)
         if unsuccessful_move: # if picked action that has negative pair of coords
             reward -= 1
             truncated = True         
         
-        # print("iter ", self.iterations)
         if self.iterations > 5: # quit if too many steps
             reward -= 1
             truncated = True
@@ -232,7 +209,6 @@ class GridWorldEnv(gym.Env):
         if self.iterations > 1 and self.is_identical_to_previous(action, self.previous_actions):
             reward -= 1 # try * self.iterations
         
-        # print("not connected ",  self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions))
         # if current action doesnt include one of the previous actions (to prevent not connected paths between two pairs of terminals) unless the first iteration
         if self.iterations > 1 and not self.is_connected_to_previous(action, self.previous_actions): # if not first iteration and current action contains only one element from the previous
             reward -= 0.7
@@ -240,8 +216,6 @@ class GridWorldEnv(gym.Env):
         # print("connected ", self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1])        
         if self.iterations > 1 and self.is_connected_to_previous(action, self.previous_actions) and not self.is_identical_to_previous(action, self.previous_actions) and not action[0] == action[1]:
             reward += 0.5
-        
-        # print('rew2=', reward)
             
         self.previous_actions.append(action)
         
@@ -257,9 +231,7 @@ class GridWorldEnv(gym.Env):
                     input("Press the <ENTER> key to continue...")
 
         # If terminated or truncated, add local overflow to general overflow
-        if self.env_steps % 1 == 0 and (terminated or truncated):
-        # if terminated:
-            
+        if self.env_steps % 1 == 0 and (terminated or truncated):   
             # Update for 3D coordinates
             upto_row = min(self.insertion_coords[0] + LOCAL_AREA_SIZE, self.origin_shape[0])
             upto_column = min(self.insertion_coords[1] + LOCAL_AREA_SIZE, self.origin_shape[1])
@@ -268,7 +240,6 @@ class GridWorldEnv(gym.Env):
             limit_row = self.origin_shape[0] - self.insertion_coords[0]
             limit_column = self.origin_shape[1] - self.insertion_coords[1]
             limit_z = self.origin_shape[2] - self.insertion_coords[2]
-            # print("===================")
 
             self.general_overflow_matrix[
                 self.insertion_coords[0]:upto_row, 
@@ -425,18 +396,15 @@ class GridWorldEnv(gym.Env):
         if colormap is None:
             colormap = {1: 'rgba(255, 0, 0, 0.7)', 2: 'rgba(0, 255, 0, 0.7)'}
         
-        # Create figure
         fig = go.Figure()
         
-        # Get dimensions
         x_size, y_size, z_size = reference_matrix.shape
         
-        # STEP 1: Create coordinates for EVERY cell in the 3D grid
+        # Create coordinates for EVERY cell in the 3D grid
         X, Y, Z = np.mgrid[0:x_size, 0:y_size, 0:z_size]
         X_flat, Y_flat, Z_flat = X.flatten(), Y.flatten(), Z.flatten()
         Z_scaled_flat = Z_flat * z_scale
         
-        # Get reference values for all points
         ref_values_flat = reference_matrix.flatten()
         
         # Filter out zeros if skip_zeros is True
@@ -446,7 +414,7 @@ class GridWorldEnv(gym.Env):
             display_mask = np.ones_like(ref_values_flat, dtype=bool)
         
         # Add heatmap dots for ALL reference matrix cells (with optional zero filtering)
-        # Use only the points that passed the display mask
+        # Uses only the points that passed the display mask
         X_display = X_flat[display_mask]
         Y_display = Y_flat[display_mask]
         Z_display = Z_scaled_flat[display_mask]
@@ -459,8 +427,8 @@ class GridWorldEnv(gym.Env):
             mode='markers',
             marker=dict(
                 size=marker_size_filler,
-                color=values_display,  # Use the reference values for color
-                colorscale='Viridis',  # Use a heat map color scale
+                color=values_display,
+                colorscale='Viridis',
                 opacity=0.5,
                 symbol='circle',
                 colorbar=dict(
@@ -474,7 +442,7 @@ class GridWorldEnv(gym.Env):
             name='Reference Matrix'
         ))
         
-        # STEP 2: Overlay the path visualization with special colors (from local_matrix)
+        # Overlay the path visualization with special colors (from local_matrix)
         local_flat = local_matrix.flatten()
         
         # Only add path points for values in the colormap (1 and 2)
@@ -522,7 +490,7 @@ class GridWorldEnv(gym.Env):
                 yaxis=dict(**axis_settings, range=[-1, y_size]),
                 zaxis=dict(**axis_settings, range=[-1, z_size * z_scale]),  # Scale z range accordingly
                 aspectmode='manual',  # Allow different scales for axes
-                aspectratio=dict(x=1, y=1, z=z_scale)  # Set aspect ratio
+                aspectratio=dict(x=1, y=1, z=z_scale)
             ),
             scene_camera=camera,
             margin=dict(r=10, l=10, b=10, t=50 if title else 10),
@@ -533,6 +501,5 @@ class GridWorldEnv(gym.Env):
                 x=0.99
             )
         )
-        
-        # Display the figure
+
         fig.show()
