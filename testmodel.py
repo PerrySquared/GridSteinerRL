@@ -145,12 +145,10 @@ def write_to_global_overflow(insertion_coords, origin_shape, rows, columns, laye
         insertion_coords[2]:upto_z
     ] += route[0:limit_row, 0:limit_column, 0:limit_z]
 
-# Single loop implementation
 for model_path in model_paths:
     # Determine if we're at the last iteration
     model_name = model_path.split("/")[-1]
     
-    # Extract pin number from model name
     pin_count = extract_pin_number(model_name)
     
     if model_name not in results:
@@ -166,8 +164,7 @@ for model_path in model_paths:
                                      'general_overflow_matrix': OUT_GENERAL_OVERFLOW,
                                      'file': f}
                           ) 
-    
-    # Load the current model
+
     model = PPO.load(model_path, env=vec_env)
     
     obs = vec_env.reset()
@@ -182,7 +179,7 @@ for model_path in model_paths:
     failed_count = 0
     
     insertion_coords = []
-    # while(nets_count != 0):
+
     while(type(insertion_coords) is not bool):
         action, lstm_states = model.predict(obs, state=lstm_states, episode_start=episode_starts, deterministic=True)
         obs, rewards, dones, info = vec_env.step(action)
@@ -217,7 +214,6 @@ for model_path in model_paths:
     end = time.time()
     elapsed = end - start
     
-    # Store results
     results[model_name][f"ppo_approach_{True}"] = {
         "time": elapsed,
         "nets_routed": nets_count,
@@ -226,13 +222,10 @@ for model_path in model_paths:
     
     print(f"Completed in {elapsed:.2f} seconds with {failed_count} failures")
     
-    # Clean up environment
     vec_env.close()
 
 
 
-
-# Print summary of results
 print("\nResults Summary:")
 for model, approaches_data in results.items():
     print(f"\nModel: {model}")
