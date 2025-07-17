@@ -1,12 +1,9 @@
 # GridSteinerRL
 
 ## General Information
-- Goal of this currently WiP project is to create an RL (currently A2C) approach to solve steiner trees
-- Support up to 5 targets (currently)
+- The goal of this project is to create an RL (currently A2C) approach to solve the global routing problem
+- Support up to 5 pins (currently)
 - Requires matrix format for input (.lef + .def -> matrix)
-- Not accepting PRs due to personal nature of the project, sorry
 
-<p>a quick example</p>
-
-![image](https://github.com/user-attachments/assets/b8c054dc-100e-44c3-bfa9-8fff04a19a39)
-
+<p>A quick example of a result</p>
+<img width="602" height="441" alt="image" src="https://github.com/user-attachments/assets/925462f7-be09-4e31-a4e4-04293897b137" />
